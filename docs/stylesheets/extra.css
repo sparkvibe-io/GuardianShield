@@ -940,5 +940,15 @@ body { -webkit-font-smoothing: antialiased; }
   .hero-section::before { width: 300px; height: 200px; }
 }
 
+/* ============================================================
+   HOMEPAGE -- full-width, no sidebar / TOC
+   ============================================================ */
+
+/* When toc+navigation are hidden via front-matter, stretch content full-width */
+.md-main__inner { max-width: 100%; }
+
+/* Green check icon in comparison table */
+.gs-check { color: var(--gs-accent); }
+
 html { scroll-behavior: smooth; }
 ::selection { background: rgba(16, 185, 129, 0.3); }
