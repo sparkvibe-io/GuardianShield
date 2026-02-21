@@ -1,0 +1,34 @@
+name: children
+description: >-
+  Safety profile for child-facing applications with maximum sensitivity and
+  broad content blocking.
+
+code_scanner:
+  enabled: true
+  sensitivity: high
+  custom_patterns: []
+
+secret_scanner:
+  enabled: true
+  sensitivity: high
+  custom_patterns: []
+
+injection_detector:
+  enabled: true
+  sensitivity: high
+  custom_patterns: []
+
+pii_detector:
+  enabled: true
+  sensitivity: high
+  custom_patterns: []
+
+content_moderator:
+  enabled: true
+  sensitivity: high
+  custom_patterns: []
+
+blocked_categories:
+  - violence
+  - self_harm
+  - illegal_activity

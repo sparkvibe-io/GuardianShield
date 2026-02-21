@@ -1,0 +1,112 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "guardianshield"
+version = "0.1.0"
+description = "Universal AI security layer - MCP server for code scanning, PII detection, prompt injection defense, secret detection, and audit logging"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.9"
+authors = [
+    { name = "Krishna" },
+]
+keywords = [
+    "ai",
+    "security",
+    "mcp",
+    "guardrails",
+    "pii",
+    "prompt-injection",
+    "secrets",
+    "audit",
+    "llm",
+    "code-scanning",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Quality Assurance",
+    "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+presidio = [
+    "presidio-analyzer>=2.2",
+    "presidio-anonymizer>=2.2",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+    "ruff",
+    "mypy",
+]
+
+[project.urls]
+Homepage = "https://github.com/krishnaguardianshield/guardianshield"
+Repository = "https://github.com/krishnaguardianshield/guardianshield"
+Issues = "https://github.com/krishnaguardianshield/guardianshield/issues"
+
+[project.scripts]
+guardianshield-mcp = "guardianshield.mcp_server:main"
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "N",    # pep8-naming
+    "UP",   # pyupgrade
+    "B",    # flake8-bugbear
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific rules
+]
+ignore = [
+    "E501",   # line length is handled by formatter
+    "RUF022", # allow logical grouping in __all__
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["guardianshield"]
+
+# ---------------------------------------------------------------------------
+# Mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "presidio_analyzer.*",
+    "presidio_anonymizer.*",
+]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
