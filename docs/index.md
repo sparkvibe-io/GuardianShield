@@ -16,10 +16,10 @@ code scanning, PII detection, prompt injection defense, secret detection, and au
 </p>
 
 <div class="hero-badges">
-  <span class="hero-badge accent"><span class="ms">verified_user</span> MCP Server</span>
+  <span class="hero-badge accent"><span class="material-symbols-rounded">verified_user</span> MCP Server</span>
   <span class="hero-badge">Apache-2.0</span>
   <span class="hero-badge">Python 3.9+</span>
-  <span class="hero-badge accent"><span class="ms">lock</span> Zero Dependencies</span>
+  <span class="hero-badge accent"><span class="material-symbols-rounded">lock</span> Zero Dependencies</span>
 </div>
 
 <div class="hero-install">pip install guardianshield</div>
@@ -66,19 +66,19 @@ AI coding agents operate with broad access to your codebase, secrets, and infras
 
 <div class="threat-grid">
   <div class="threat-card">
-    <h4><span class="ms ms-red">vpn_key</span> Secret Leakage</h4>
+    <h4><span class="material-symbols-rounded ms-red">vpn_key</span> Secret Leakage</h4>
     <p>API keys, tokens, and credentials accidentally committed to code or exposed through AI-generated output.</p>
   </div>
   <div class="threat-card">
-    <h4><span class="ms ms-red">gpp_bad</span> Prompt Injection</h4>
+    <h4><span class="material-symbols-rounded ms-red">gpp_bad</span> Prompt Injection</h4>
     <p>Malicious instructions hidden in code comments, issues, or data that hijack AI agent behavior.</p>
   </div>
   <div class="threat-card">
-    <h4><span class="ms ms-red">privacy_tip</span> PII Exposure</h4>
+    <h4><span class="material-symbols-rounded ms-red">privacy_tip</span> PII Exposure</h4>
     <p>Personal data — SSNs, emails, credit cards — leaking through AI-generated code or responses.</p>
   </div>
   <div class="threat-card">
-    <h4><span class="ms ms-red">bug_report</span> Code Vulnerabilities</h4>
+    <h4><span class="material-symbols-rounded ms-red">bug_report</span> Code Vulnerabilities</h4>
     <p>SQL injection, XSS, command injection, and path traversal patterns introduced by AI agents.</p>
   </div>
 </div>
@@ -94,19 +94,19 @@ GuardianShield sits between your AI agent and your codebase, scanning every inte
 
 <div class="shield-grid">
   <div class="shield-card">
-    <h4><span class="ms ms-green">policy</span> Code Scanning</h4>
+    <h4><span class="material-symbols-rounded ms-green">policy</span> Code Scanning</h4>
     <p>Detects SQL injection, XSS, command injection, path traversal, and insecure functions before code is committed.</p>
   </div>
   <div class="shield-card">
-    <h4><span class="ms ms-green">enhanced_encryption</span> Secret Detection</h4>
+    <h4><span class="material-symbols-rounded ms-green">enhanced_encryption</span> Secret Detection</h4>
     <p>12+ patterns catch AWS keys, GitHub tokens, Stripe keys, JWTs, private keys, and database credentials.</p>
   </div>
   <div class="shield-card">
-    <h4><span class="ms ms-green">block</span> Injection Defense</h4>
+    <h4><span class="material-symbols-rounded ms-green">block</span> Injection Defense</h4>
     <p>9+ heuristic patterns identify instruction overrides, role hijacking, ChatML injection, and jailbreak attempts.</p>
   </div>
   <div class="shield-card">
-    <h4><span class="ms ms-green">visibility</span> PII Detection</h4>
+    <h4><span class="material-symbols-rounded ms-green">visibility</span> PII Detection</h4>
     <p>Catches emails, SSNs, credit cards, phone numbers, and IP addresses — with automatic redaction.</p>
   </div>
 </div>
@@ -242,27 +242,27 @@ Pre-configured security policies for different industries and use cases. Switch 
 
 <div class="profile-grid">
   <div class="profile-card">
-    <span class="pc-icon"><span class="ms ms-lg">language</span></span>
+    <span class="pc-icon"><span class="material-symbols-rounded ms-lg">language</span></span>
     <h4>General</h4>
     <p>Balanced defaults for everyday development</p>
   </div>
   <div class="profile-card">
-    <span class="pc-icon"><span class="ms ms-lg">school</span></span>
+    <span class="pc-icon"><span class="material-symbols-rounded ms-lg">school</span></span>
     <h4>Education</h4>
     <p>Content safety for learning environments</p>
   </div>
   <div class="profile-card">
-    <span class="pc-icon"><span class="ms ms-lg">local_hospital</span></span>
+    <span class="pc-icon"><span class="material-symbols-rounded ms-lg">local_hospital</span></span>
     <h4>Healthcare</h4>
     <p>HIPAA-aware PII and PHI protection</p>
   </div>
   <div class="profile-card">
-    <span class="pc-icon"><span class="ms ms-lg">account_balance</span></span>
+    <span class="pc-icon"><span class="material-symbols-rounded ms-lg">account_balance</span></span>
     <h4>Finance</h4>
     <p>PCI-DSS compliant secret handling</p>
   </div>
   <div class="profile-card">
-    <span class="pc-icon"><span class="ms ms-lg">child_care</span></span>
+    <span class="pc-icon"><span class="material-symbols-rounded ms-lg">child_care</span></span>
     <h4>Children</h4>
     <p>Maximum content filtering and safety</p>
   </div>
@@ -277,32 +277,32 @@ Pre-configured security policies for different industries and use cases. Switch 
 
 <div class="feature-grid">
   <div class="feature-card">
-    <span class="fc-icon"><span class="ms ms-lg">inventory_2</span></span>
+    <span class="fc-icon"><span class="material-symbols-rounded ms-lg">inventory_2</span></span>
     <h3>Zero Dependencies</h3>
     <p>Pure Python stdlib — no pip install headaches, no supply chain risk.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon"><span class="ms ms-lg">menu_book</span></span>
+    <span class="fc-icon"><span class="material-symbols-rounded ms-lg">menu_book</span></span>
     <h3>Audit Trail</h3>
     <p>Every scan logged to SQLite with SHA-256 hashed inputs — never stores raw data.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon"><span class="ms ms-lg">shield</span></span>
+    <span class="fc-icon"><span class="material-symbols-rounded ms-lg">shield</span></span>
     <h3>Auto Redaction</h3>
     <p>Secrets and PII are automatically redacted in all findings and logs.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon"><span class="ms ms-lg">extension</span></span>
+    <span class="fc-icon"><span class="material-symbols-rounded ms-lg">extension</span></span>
     <h3>Composable</h3>
     <p>Use as MCP server, Python library, or integrate into CI/CD pipelines.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon"><span class="ms ms-lg">settings</span></span>
+    <span class="fc-icon"><span class="material-symbols-rounded ms-lg">settings</span></span>
     <h3>Configurable</h3>
     <p>Sensitivity levels, custom patterns, and per-scanner toggles via profiles.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon"><span class="ms ms-lg">balance</span></span>
+    <span class="fc-icon"><span class="material-symbols-rounded ms-lg">balance</span></span>
     <h3>Apache-2.0</h3>
     <p>Free forever. Patent-protected open source — security for humanity.</p>
   </div>
@@ -337,17 +337,17 @@ Pre-configured security policies for different industries and use cases. Switch 
 
 <div class="community-row">
   <a href="https://github.com/sparkvibe-io/GuardianShield" class="community-card">
-    <span class="cc-icon"><span class="ms ms-lg">star</span></span>
+    <span class="cc-icon"><span class="material-symbols-rounded ms-lg">star</span></span>
     <h4>Star on GitHub</h4>
     <p>Show your support and stay updated with releases</p>
   </a>
   <a href="https://github.com/sparkvibe-io/GuardianShield/issues" class="community-card">
-    <span class="cc-icon"><span class="ms ms-lg">bug_report</span></span>
+    <span class="cc-icon"><span class="material-symbols-rounded ms-lg">bug_report</span></span>
     <h4>Report Issues</h4>
     <p>Found a bug or have a feature request? Let us know</p>
   </a>
   <a href="contributing.md" class="community-card">
-    <span class="cc-icon"><span class="ms ms-lg">handshake</span></span>
+    <span class="cc-icon"><span class="material-symbols-rounded ms-lg">handshake</span></span>
     <h4>Contribute</h4>
     <p>Help make AI security accessible to everyone</p>
   </a>
