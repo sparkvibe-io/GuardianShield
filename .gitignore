@@ -35,5 +35,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
+# MkDocs
+site/
+
 # Ruff
 .ruff_cache/

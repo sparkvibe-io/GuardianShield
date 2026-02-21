@@ -1,0 +1,100 @@
+site_name: GuardianShield
+site_description: "Universal AI Security Layer \u2014 free, open-source MCP server for code scanning, PII detection, prompt injection defense, secret detection, and audit logging. Works with Claude Code, VS Code, Cursor, Windsurf, OpenSpek, and any MCP client."
+site_url: https://sparkvibe-io.github.io/GuardianShield/
+repo_url: https://github.com/sparkvibe-io/GuardianShield
+repo_name: sparkvibe-io/GuardianShield
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-7
+        name: Switch to light mode
+    - scheme: default
+      primary: custom
+      accent: custom
+      toggle:
+        icon: material/brightness-4
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - navigation.instant.progress
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+    - content.tabs.link
+    - toc.follow
+    - header.autohide
+  icon:
+    repo: fontawesome/brands/github
+  logo: assets/logo.svg
+  favicon: assets/favicon.svg
+  custom_dir: docs/overrides
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/sparkvibe-io/GuardianShield
+    - icon: fontawesome/brands/python
+      link: https://pypi.org/project/guardianshield/
+  generator: false
+
+extra_css:
+  - stylesheets/extra.css
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - def_list
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - meta
+
+plugins:
+  - search
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started.md
+    - Configuration: configuration.md
+  - Guides:
+    - MCP Server Setup: mcp-server.md
+    - Safety Profiles: profiles.md
+    - Audit & Compliance: audit.md
+  - Reference:
+    - API Reference: api.md
+    - Architecture: architecture.md
+  - Community:
+    - FAQ: faq.md
+    - Contributing: contributing.md
+
+copyright: Copyright &copy; 2025 SparkVibe &mdash; Security for Humanity
