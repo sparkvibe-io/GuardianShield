@@ -1,6 +1,9 @@
 ---
 title: Universal AI Security Layer
 description: Free, open-source MCP server for code scanning, PII detection, prompt injection defense, secret detection, and audit logging.
+hide:
+  - toc
+  - navigation
 ---
 
 <div class="hero-section" markdown>
@@ -13,10 +16,10 @@ code scanning, PII detection, prompt injection defense, secret detection, and au
 </p>
 
 <div class="hero-badges">
-  <span class="hero-badge accent">:shield: MCP Server</span>
+  <span class="hero-badge accent">:material-shield-check: MCP Server</span>
   <span class="hero-badge">Apache-2.0</span>
   <span class="hero-badge">Python 3.9+</span>
-  <span class="hero-badge accent">:lock: Zero Dependencies</span>
+  <span class="hero-badge accent">:material-lock: Zero Dependencies</span>
 </div>
 
 <div class="hero-install">pip install guardianshield</div>
@@ -57,25 +60,25 @@ code scanning, PII detection, prompt injection defense, secret detection, and au
 <!-- Threats -->
 <div class="gs-section" markdown>
 
-## :warning: Threats AI Agents Face
+## :material-alert-circle: Threats AI Agents Face
 
 AI coding agents operate with broad access to your codebase, secrets, and infrastructure. Without guardrails, they can introduce or leak critical security issues.
 
 <div class="threat-grid">
   <div class="threat-card">
-    <h4>:key: Secret Leakage</h4>
+    <h4>:material-key-variant: Secret Leakage</h4>
     <p>API keys, tokens, and credentials accidentally committed to code or exposed through AI-generated output.</p>
   </div>
   <div class="threat-card">
-    <h4>:syringe: Prompt Injection</h4>
+    <h4>:material-needle: Prompt Injection</h4>
     <p>Malicious instructions hidden in code comments, issues, or data that hijack AI agent behavior.</p>
   </div>
   <div class="threat-card">
-    <h4>:bust_in_silhouette: PII Exposure</h4>
+    <h4>:material-account-alert: PII Exposure</h4>
     <p>Personal data — SSNs, emails, credit cards — leaking through AI-generated code or responses.</p>
   </div>
   <div class="threat-card">
-    <h4>:bug: Code Vulnerabilities</h4>
+    <h4>:material-bug: Code Vulnerabilities</h4>
     <p>SQL injection, XSS, command injection, and path traversal patterns introduced by AI agents.</p>
   </div>
 </div>
@@ -85,25 +88,25 @@ AI coding agents operate with broad access to your codebase, secrets, and infras
 <!-- Shield Protection -->
 <div class="gs-section" markdown>
 
-## :shield: How GuardianShield Protects
+## :material-shield-check: How GuardianShield Protects
 
 GuardianShield sits between your AI agent and your codebase, scanning every interaction in real-time.
 
 <div class="shield-grid">
   <div class="shield-card">
-    <h4>:mag: Code Scanning</h4>
+    <h4>:material-magnify-scan: Code Scanning</h4>
     <p>Detects SQL injection, XSS, command injection, path traversal, and insecure functions before code is committed.</p>
   </div>
   <div class="shield-card">
-    <h4>:closed_lock_with_key: Secret Detection</h4>
+    <h4>:material-lock-check: Secret Detection</h4>
     <p>12+ patterns catch AWS keys, GitHub tokens, Stripe keys, JWTs, private keys, and database credentials.</p>
   </div>
   <div class="shield-card">
-    <h4>:no_entry: Injection Defense</h4>
+    <h4>:material-block-helper: Injection Defense</h4>
     <p>9+ heuristic patterns identify instruction overrides, role hijacking, ChatML injection, and jailbreak attempts.</p>
   </div>
   <div class="shield-card">
-    <h4>:eye: PII Detection</h4>
+    <h4>:material-eye-check: PII Detection</h4>
     <p>Catches emails, SSNs, credit cards, phone numbers, and IP addresses — with automatic redaction.</p>
   </div>
 </div>
@@ -113,7 +116,7 @@ GuardianShield sits between your AI agent and your codebase, scanning every inte
 <!-- 9 MCP Tools -->
 <div class="gs-section" markdown>
 
-## :wrench: 9 MCP Tools
+## :material-wrench: 9 MCP Tools
 
 Every security capability is exposed as a standard MCP tool — callable from any compatible AI client.
 
@@ -161,7 +164,7 @@ Every security capability is exposed as a standard MCP tool — callable from an
 <!-- Works Everywhere -->
 <div class="gs-section" markdown>
 
-## :globe_with_meridians: Works Everywhere
+## :material-earth: Works Everywhere
 
 One install. Every AI editor. GuardianShield speaks MCP — the universal protocol for AI tool integration.
 
@@ -183,7 +186,7 @@ One install. Every AI editor. GuardianShield speaks MCP — the universal protoc
 <!-- Quick Setup -->
 <div class="gs-section" markdown>
 
-## :zap: Quick Setup
+## :material-lightning-bolt: Quick Setup
 
 === "Claude Code"
 
@@ -233,33 +236,33 @@ One install. Every AI editor. GuardianShield speaks MCP — the universal protoc
 <!-- Safety Profiles -->
 <div class="gs-section" markdown>
 
-## :dart: Safety Profiles
+## :material-target: Safety Profiles
 
 Pre-configured security policies for different industries and use cases. Switch profiles with a single MCP call.
 
 <div class="profile-grid">
   <div class="profile-card">
-    <span class="pc-icon">:globe_with_meridians:</span>
+    <span class="pc-icon">:material-web:</span>
     <h4>General</h4>
     <p>Balanced defaults for everyday development</p>
   </div>
   <div class="profile-card">
-    <span class="pc-icon">:mortar_board:</span>
+    <span class="pc-icon">:material-school:</span>
     <h4>Education</h4>
     <p>Content safety for learning environments</p>
   </div>
   <div class="profile-card">
-    <span class="pc-icon">:hospital:</span>
+    <span class="pc-icon">:material-hospital-box:</span>
     <h4>Healthcare</h4>
     <p>HIPAA-aware PII and PHI protection</p>
   </div>
   <div class="profile-card">
-    <span class="pc-icon">:bank:</span>
+    <span class="pc-icon">:material-bank:</span>
     <h4>Finance</h4>
     <p>PCI-DSS compliant secret handling</p>
   </div>
   <div class="profile-card">
-    <span class="pc-icon">:child:</span>
+    <span class="pc-icon">:material-account-child:</span>
     <h4>Children</h4>
     <p>Maximum content filtering and safety</p>
   </div>
@@ -270,36 +273,36 @@ Pre-configured security policies for different industries and use cases. Switch 
 <!-- Core Features -->
 <div class="gs-section" markdown>
 
-## :sparkles: Core Features
+## :material-creation: Core Features
 
 <div class="feature-grid">
   <div class="feature-card">
-    <span class="fc-icon">:package:</span>
+    <span class="fc-icon">:material-package-variant:</span>
     <h3>Zero Dependencies</h3>
     <p>Pure Python stdlib — no pip install headaches, no supply chain risk.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon">:notebook:</span>
+    <span class="fc-icon">:material-notebook-check:</span>
     <h3>Audit Trail</h3>
     <p>Every scan logged to SQLite with SHA-256 hashed inputs — never stores raw data.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon">:shield:</span>
+    <span class="fc-icon">:material-shield-lock:</span>
     <h3>Auto Redaction</h3>
     <p>Secrets and PII are automatically redacted in all findings and logs.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon">:jigsaw:</span>
+    <span class="fc-icon">:material-puzzle:</span>
     <h3>Composable</h3>
     <p>Use as MCP server, Python library, or integrate into CI/CD pipelines.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon">:gear:</span>
+    <span class="fc-icon">:material-cog:</span>
     <h3>Configurable</h3>
     <p>Sensitivity levels, custom patterns, and per-scanner toggles via profiles.</p>
   </div>
   <div class="feature-card">
-    <span class="fc-icon">:scales:</span>
+    <span class="fc-icon">:material-scale-balance:</span>
     <h3>Apache-2.0</h3>
     <p>Free forever. Patent-protected open source — security for humanity.</p>
   </div>
@@ -310,19 +313,19 @@ Pre-configured security policies for different industries and use cases. Switch 
 <!-- Comparison -->
 <div class="gs-section" markdown>
 
-## :bar_chart: How GuardianShield Compares
+## :material-chart-bar: How GuardianShield Compares
 
 | Feature | NeMo Guardrails | Guardrails AI | Llama Guard | Presidio | **GuardianShield** |
 |---|---|---|---|---|---|
-| Code Scanning | — | — | — | — | **:white_check_mark:** |
-| Secret Detection | — | — | — | — | **:white_check_mark:** |
-| Prompt Injection | :white_check_mark: | Partial | :white_check_mark: | — | **:white_check_mark:** |
-| PII Detection | — | Partial | — | :white_check_mark: | **:white_check_mark:** |
-| Content Moderation | :white_check_mark: | :white_check_mark: | :white_check_mark: | — | **:white_check_mark:** |
-| Audit Logging | — | — | — | — | **:white_check_mark:** |
-| Safety Profiles | — | — | — | — | **:white_check_mark:** |
-| MCP Integration | — | — | — | — | **:white_check_mark:** |
-| Zero Dependencies | — | — | — | — | **:white_check_mark:** |
+| Code Scanning | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| Secret Detection | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| Prompt Injection | :material-check-circle: | Partial | :material-check-circle: | — | **:material-check-circle:{ .gs-check }** |
+| PII Detection | — | Partial | — | :material-check-circle: | **:material-check-circle:{ .gs-check }** |
+| Content Moderation | :material-check-circle: | :material-check-circle: | :material-check-circle: | — | **:material-check-circle:{ .gs-check }** |
+| Audit Logging | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| Safety Profiles | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| MCP Integration | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| Zero Dependencies | — | — | — | — | **:material-check-circle:{ .gs-check }** |
 | **GuardianShield** | **1 of 9** | **2 of 9** | **2 of 9** | **1 of 9** | **9 of 9** |
 
 </div>
@@ -330,21 +333,21 @@ Pre-configured security policies for different industries and use cases. Switch 
 <!-- Community -->
 <div class="gs-section" markdown>
 
-## :people_holding_hands: Community
+## :material-account-group: Community
 
 <div class="community-row">
   <a href="https://github.com/sparkvibe-io/GuardianShield" class="community-card">
-    <span class="cc-icon">:star:</span>
+    <span class="cc-icon">:material-star:</span>
     <h4>Star on GitHub</h4>
     <p>Show your support and stay updated with releases</p>
   </a>
   <a href="https://github.com/sparkvibe-io/GuardianShield/issues" class="community-card">
-    <span class="cc-icon">:bug:</span>
+    <span class="cc-icon">:material-bug:</span>
     <h4>Report Issues</h4>
     <p>Found a bug or have a feature request? Let us know</p>
   </a>
   <a href="contributing.md" class="community-card">
-    <span class="cc-icon">:handshake:</span>
+    <span class="cc-icon">:material-handshake:</span>
     <h4>Contribute</h4>
     <p>Help make AI security accessible to everyone</p>
   </a>
@@ -361,8 +364,8 @@ Pre-configured security policies for different industries and use cases. Switch 
 
 <div class="hero-buttons" markdown>
 
-[Get Started :arrow_right:](getting-started.md){ .md-button .md-button--primary }
-[Read the Docs :book:](mcp-server.md){ .md-button }
+[Get Started :material-arrow-right:](getting-started.md){ .md-button .md-button--primary }
+[Read the Docs :material-book-open-variant:](mcp-server.md){ .md-button }
 
 </div>
 
