@@ -1,0 +1,30 @@
+name: general
+description: >-
+  General-purpose safety profile with medium sensitivity across all scanners.
+
+code_scanner:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+secret_scanner:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+injection_detector:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+pii_detector:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+content_moderator:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+blocked_categories: []

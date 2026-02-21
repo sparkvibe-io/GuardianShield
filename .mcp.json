@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "guardianshield": {
+      "command": "guardianshield-mcp",
+      "env": {
+        "GUARDIANSHIELD_PROFILE": "general"
+      }
+    }
+  }
+}

@@ -1,0 +1,32 @@
+name: education
+description: >-
+  Safety profile for educational platforms, blocking violence and self-harm content.
+
+code_scanner:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+secret_scanner:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+injection_detector:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+pii_detector:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+content_moderator:
+  enabled: true
+  sensitivity: medium
+  custom_patterns: []
+
+blocked_categories:
+  - violence
+  - self_harm
