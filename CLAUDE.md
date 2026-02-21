@@ -45,3 +45,36 @@ pip install -e ".[dev]"
 pytest tests/ -v
 ruff check src/ tests/
 ```
+
+## Memory (MemoryMesh)
+
+MemoryMesh is configured as an MCP tool in this project. It adds persistent,
+structured, cross-tool memory on top of your existing memory system. Use it
+alongside your default memory -- it enhances, not replaces.
+
+### At the start of every conversation
+
+Call `mcp__memorymesh__recall` with a summary of the user's request to load
+prior context, decisions, and patterns. If `session_start` is available,
+call it to load user profile, guardrails, and project context.
+
+### When to `recall`
+
+- **Start of every conversation**: Check for relevant prior context.
+- **Before making decisions**: Check if this was decided before.
+- **When debugging**: Check if this problem was encountered previously.
+
+### When to `remember`
+
+- **When the user says "remember this"**: Store it with a category.
+- **After completing a task**: Store key decisions and patterns.
+  Use `category` to classify: `"decision"`, `"pattern"`, `"context"`.
+- **When the user teaches you something**: Use `category: "preference"`
+  or `category: "guardrail"` -- these auto-route to global scope.
+- **After fixing a non-trivial bug**: Use `category: "mistake"`.
+
+### Scope guidance
+
+Categories auto-route scope. If not using categories:
+- Use `scope: "project"` for project-specific decisions.
+- Use `scope: "global"` for user preferences and identity.
