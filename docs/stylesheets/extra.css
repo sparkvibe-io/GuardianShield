@@ -3,8 +3,7 @@
    Emerald green + navy palette for trust & protection
    ============================================================ */
 
-/* Material Symbols Rounded -- icon font for HTML blocks */
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0');
+/* Material Symbols Rounded -- font loaded via mkdocs.yml extra_css <link> */
 
 .ms {
   font-family: 'Material Symbols Rounded';
