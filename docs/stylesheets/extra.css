@@ -3,6 +3,31 @@
    Emerald green + navy palette for trust & protection
    ============================================================ */
 
+/* Material Symbols Rounded -- icon font for HTML blocks */
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,400,1,0');
+
+.ms {
+  font-family: 'Material Symbols Rounded';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 1.2em;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  vertical-align: middle;
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Larger icon variant for card icons */
+.ms-lg { font-size: 1.6rem; }
+.ms-red { color: var(--gs-red); }
+.ms-green { color: var(--gs-accent); }
+
 :root {
   --gs-bg-deep: #020a0a;
   --gs-bg-surface: #071111;
