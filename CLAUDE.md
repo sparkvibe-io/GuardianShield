@@ -1,49 +1,78 @@
 # GuardianShield — AI Agent Instructions
 
 GuardianShield is a universal AI security layer exposed as an MCP server.
+**Version**: 0.2.0 | **Tests**: 627 | **Dependencies**: zero (stdlib only)
 
-## Available MCP Tools
+## Available MCP Tools (14)
 
-- **scan_code**: Scan source code for vulnerabilities and hardcoded secrets
+### Scanning
+- **scan_code**: Scan source code for vulnerabilities and hardcoded secrets (Python + JS/TS)
+- **scan_file**: Scan a single file (auto-detects language from extension)
+- **scan_directory**: Recursively scan a directory with extension/exclude filtering and streaming progress
 - **scan_input**: Check input for prompt injection attempts
 - **scan_output**: Check AI output for PII leaks and content violations
 - **check_secrets**: Dedicated secret/credential detection
+- **check_dependencies**: Check packages for known CVEs via local OSV.dev cache (PyPI + npm)
+- **sync_vulnerabilities**: Sync the local OSV vulnerability database
+
+### Configuration & Utilities
 - **get_profile**: View current safety profile
 - **set_profile**: Switch safety profiles (general/education/healthcare/finance/children)
+- **test_pattern**: Test a regex pattern against sample code (returns matches with positions)
 - **audit_log**: Query the security audit log
 - **get_findings**: Retrieve past findings with filters
-- **shield_status**: Get health and configuration status
+- **shield_status**: Get health, capabilities, OSV cache stats, and configuration
 
 ## Usage Guidelines
 
-1. Use `scan_code` before committing or reviewing code changes
-2. Use `scan_input` to validate untrusted user inputs
-3. Use `scan_output` before returning AI-generated content to users
-4. Use `check_secrets` on configuration files and environment setups
-5. Switch profiles with `set_profile` based on the domain context
+1. Use `scan_code` or `scan_file` before committing or reviewing code changes
+2. Use `scan_directory` to audit an entire project
+3. Use `scan_input` to validate untrusted user inputs
+4. Use `scan_output` before returning AI-generated content to users
+5. Use `check_secrets` on configuration files and environment setups
+6. Use `check_dependencies` to audit package.json or requirements.txt deps
+7. Use `test_pattern` to develop and debug custom vulnerability regex patterns
+8. Switch profiles with `set_profile` based on the domain context
 
 ## Project Structure
 
 ```
 src/guardianshield/
-├── findings.py      # Finding dataclass + Severity/FindingType enums
-├── profiles.py      # SafetyProfile loader + built-in profiles
+├── findings.py      # Finding, Range, Remediation, Severity, FindingType
+├── profiles.py      # SafetyProfile loader + 5 built-in profiles
+├── scanner.py       # Code vulnerability scanner (language-aware)
+├── patterns/        # Language-specific pattern sets
+│   ├── __init__.py  # Registry: LANGUAGE_PATTERNS, EXTENSION_MAP, REMEDIATION_MAP
+│   ├── common.py    # 3 cross-language patterns + remediation
+│   ├── python.py    # 15 Python patterns + remediation
+│   └── javascript.py # 7 JS/TS patterns + remediation
 ├── secrets.py       # Secret/credential detection (12+ patterns)
-├── scanner.py       # Code vulnerability scanner
 ├── injection.py     # Prompt injection detector (9+ patterns)
 ├── pii.py           # PII detection (regex + optional Presidio)
 ├── content.py       # Content moderation (heuristic patterns)
+├── config.py        # Project config discovery (.guardianshield.yaml/.json)
+├── dedup.py         # Finding deduplication via SHA-256 fingerprinting
+├── osv.py           # OSV.dev local-first dependency scanner (SQLite cache)
 ├── audit.py         # SQLite audit log
-├── core.py          # GuardianShield orchestrator
-└── mcp_server.py    # MCP server (JSON-RPC over stdio)
+├── core.py          # GuardianShield orchestrator (scan_file, scan_directory)
+└── mcp_server.py    # MCP server (14 tools, 3 resources, 2 prompts)
 ```
+
+## Key v0.2 Concepts
+
+- **Finding fields**: All findings include `range` (LSP format), `confidence` (0.0–1.0), `cwe_ids`, and optional `remediation` (description + before/after code + auto_fixable)
+- **Language detection**: `scan_file` and `scan_code` auto-detect language from file extension via `EXTENSION_MAP`
+- **Deduplication**: `FindingDeduplicator` tracks fingerprints across scans, returns delta (new/unchanged/removed)
+- **Project config**: Place `.guardianshield.json` or `.guardianshield.yaml` in project root for profile, severity overrides, and exclude paths
+- **Streaming**: `scan_directory` emits JSON-RPC notifications (`guardianshield/scanProgress`, `guardianshield/finding`)
+- **Redaction**: `GuardianShieldMCPServer(redact_responses=True)` replaces matched_text with `[REDACTED:<hash>]`
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v
-ruff check src/ tests/
+pytest tests/ -v          # 627 tests
+ruff check src/ tests/    # Linting
 ```
 
 ## Memory (MemoryMesh)
