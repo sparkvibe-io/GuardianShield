@@ -100,12 +100,13 @@ class TestToolsList:
         ]
         responses = _capture_output(server, msgs)
         tools = responses[0]["result"]["tools"]
-        assert len(tools) == 9
+        assert len(tools) == 14
         names = {t["name"] for t in tools}
         assert names == {
             "scan_code", "scan_input", "scan_output", "check_secrets",
             "get_profile", "set_profile", "audit_log", "get_findings",
-            "shield_status",
+            "shield_status", "scan_file", "scan_directory", "test_pattern",
+            "check_dependencies", "sync_vulnerabilities",
         }
 
 
@@ -332,9 +333,10 @@ class TestShieldStatus:
         ]
         responses = _capture_output(server, msgs)
         content = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert content["version"] == "0.1.0"
+        assert content["version"] == "0.2.0"
         assert content["profile"] == "general"
         assert "scanners" in content
+        assert "capabilities" in content
 
 
 # ---------------------------------------------------------------------------
@@ -407,7 +409,7 @@ class TestResourcesRead:
         responses = _capture_output(server, msgs)
         contents = responses[0]["result"]["contents"]
         data = json.loads(contents[0]["text"])
-        assert data["version"] == "0.1.0"
+        assert "version" in data
 
     def test_read_unknown_resource(self, tmp_path):
         server = _make_server(tmp_path)
@@ -463,3 +465,392 @@ class TestPromptsGet:
         ]
         responses = _capture_output(server, msgs)
         assert "error" in responses[0]["result"]
+
+
+# ---------------------------------------------------------------------------
+# Phase 4A — New tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestScanFile:
+    def test_scan_file_via_mcp(self, tmp_path):
+        server = _make_server(tmp_path)
+        f = tmp_path / "app.py"
+        f.write_text("import random\ntoken = random.randint(0, 999)\n")
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_file",
+                    "arguments": {"path": str(f)},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["finding_count"] >= 1
+        assert content["file"] == str(f)
+
+    def test_scan_file_not_found(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_file",
+                    "arguments": {"path": "/nonexistent/file.py"},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+    def test_scan_file_missing_arg(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "scan_file", "arguments": {}},
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+
+class TestScanDirectory:
+    @staticmethod
+    def _find_result(responses, msg_id=1):
+        """Find the JSON-RPC response (not notifications) by id."""
+        for r in responses:
+            if r.get("id") == msg_id:
+                return r
+        raise AssertionError(f"No response with id={msg_id}")
+
+    def test_scan_directory_via_mcp(self, tmp_path):
+        (tmp_path / "app.py").write_text("import random\ntoken = random.randint(0, 999)\n")
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_directory",
+                    "arguments": {"path": str(tmp_path)},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        result_resp = self._find_result(responses)
+        content = json.loads(result_resp["result"]["content"][0]["text"])
+        assert content["finding_count"] >= 1
+        assert content["directory"] == str(tmp_path)
+
+    def test_scan_directory_not_a_dir(self, tmp_path):
+        f = tmp_path / "file.py"
+        f.write_text("x = 1")
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_directory",
+                    "arguments": {"path": str(f)},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        result_resp = self._find_result(responses)
+        assert result_resp["result"]["isError"] is True
+
+    def test_scan_directory_with_extensions(self, tmp_path):
+        (tmp_path / "app.py").write_text("import random\ntoken = random.randint(0, 999)\n")
+        (tmp_path / "app.js").write_text("var x = 1;\n")
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_directory",
+                    "arguments": {
+                        "path": str(tmp_path),
+                        "extensions": [".py"],
+                    },
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        result_resp = self._find_result(responses)
+        content = json.loads(result_resp["result"]["content"][0]["text"])
+        assert isinstance(content["findings"], list)
+
+
+class TestTestPattern:
+    def test_pattern_match(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "test_pattern",
+                    "arguments": {
+                        "regex": r"random\.randint",
+                        "sample": "import random\ntoken = random.randint(0, 999)",
+                    },
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["match_count"] == 1
+        assert content["matches"][0]["text"] == "random.randint"
+        assert content["matches"][0]["line"] == 2
+
+    def test_pattern_no_match(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "test_pattern",
+                    "arguments": {
+                        "regex": r"foo_bar_baz",
+                        "sample": "x = 1\ny = 2",
+                    },
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["match_count"] == 0
+
+    def test_pattern_invalid_regex(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "test_pattern",
+                    "arguments": {
+                        "regex": r"[invalid",
+                        "sample": "test",
+                    },
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+    def test_pattern_with_groups(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "test_pattern",
+                    "arguments": {
+                        "regex": r"(\w+)\s*=\s*(\d+)",
+                        "sample": "x = 42",
+                    },
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["match_count"] == 1
+        assert content["matches"][0]["groups"] == ["x", "42"]
+
+    def test_pattern_missing_args(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "test_pattern", "arguments": {}},
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+    def test_pattern_with_language(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "test_pattern",
+                    "arguments": {
+                        "regex": r"def\s+\w+",
+                        "sample": "def hello():\n    pass",
+                        "language": "python",
+                    },
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["language"] == "python"
+        assert content["match_count"] == 1
+
+
+class TestRedaction:
+    def test_redact_responses_hides_matched_text(self, tmp_path):
+        db = str(tmp_path / "audit.db")
+        shield = GuardianShield(profile="general", audit_path=db)
+        server = GuardianShieldMCPServer(shield=shield, redact_responses=True)
+        server._initialized = True
+
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_code",
+                    "arguments": {"code": 'key = "AKIAIOSFODNN7EXAMPLE"'},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["finding_count"] >= 1
+        for finding in content["findings"]:
+            assert finding["matched_text"].startswith("[REDACTED:")
+
+    def test_no_redaction_by_default(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_code",
+                    "arguments": {"code": 'key = "AKIAIOSFODNN7EXAMPLE"'},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["finding_count"] >= 1
+        for finding in content["findings"]:
+            assert not finding["matched_text"].startswith("[REDACTED:")
+
+
+class TestShieldStatusV2:
+    def test_status_includes_capabilities(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "shield_status", "arguments": {}},
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert "capabilities" in content
+        assert "scan_file" in content["capabilities"]
+        assert "check_dependencies" in content["capabilities"]
+
+    def test_status_version_is_0_2(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "shield_status", "arguments": {}},
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["version"] == "0.2.0"
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 — Streaming notification tests
+# ---------------------------------------------------------------------------
+
+
+class TestStreamingNotifications:
+    def test_scan_directory_emits_progress_notifications(self, tmp_path):
+        (tmp_path / "app.py").write_text("import random\ntoken = random.randint(0, 999)\n")
+        (tmp_path / "util.py").write_text('def hello():\n    return "world"\n')
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_directory",
+                    "arguments": {"path": str(tmp_path)},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        # Notifications have no "id" field; the final response has id=1.
+        notifications = [r for r in responses if "id" not in r]
+        final = [r for r in responses if r.get("id") == 1]
+
+        assert len(final) == 1
+        # Should have progress notifications (one per file)
+        progress = [n for n in notifications if n.get("method") == "guardianshield/scanProgress"]
+        assert len(progress) == 2
+        # Each progress notification has file, done, total
+        for p in progress:
+            assert "file" in p["params"]
+            assert "done" in p["params"]
+            assert "total" in p["params"]
+
+    def test_scan_directory_emits_finding_notifications(self, tmp_path):
+        (tmp_path / "vuln.py").write_text("import random\ntoken = random.randint(0, 999)\n")
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_directory",
+                    "arguments": {"path": str(tmp_path)},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        finding_notifications = [
+            r for r in responses
+            if "id" not in r and r.get("method") == "guardianshield/finding"
+        ]
+        assert len(finding_notifications) >= 1
+        assert "finding" in finding_notifications[0]["params"]
+
+    def test_empty_directory_no_notifications(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_directory",
+                    "arguments": {"path": str(tmp_path)},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        notifications = [r for r in responses if "id" not in r]
+        assert len(notifications) == 0
+
+
+class TestExports:
+    def test_version_is_0_2(self):
+        import guardianshield
+        assert guardianshield.__version__ == "0.2.0"
+
+    def test_v2_types_exported(self):
+        from guardianshield import (
+            Range,
+            Remediation,
+            DedupResult,
+            FindingDeduplicator,
+            ProjectConfig,
+            discover_config,
+            Dependency,
+            OsvCache,
+            check_dependencies,
+        )
+        assert Range is not None
+        assert Remediation is not None
+        assert DedupResult is not None
+        assert FindingDeduplicator is not None
+        assert ProjectConfig is not None
+        assert discover_config is not None
+        assert Dependency is not None
+        assert OsvCache is not None
+        assert check_dependencies is not None

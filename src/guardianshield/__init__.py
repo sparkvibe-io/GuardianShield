@@ -19,20 +19,32 @@ Quick start::
 
 from __future__ import annotations
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
+from .config import ProjectConfig, discover_config
 from .core import GuardianShield
-from .findings import Finding, FindingType, Severity
+from .dedup import DedupResult, FindingDeduplicator
+from .findings import Finding, FindingType, Range, Remediation, Severity
 from .mcp_server import GuardianShieldMCPServer
+from .osv import Dependency, OsvCache, check_dependencies
 from .profiles import SafetyProfile, ScannerConfig
 
 __all__ = [
     "__version__",
+    "DedupResult",
+    "Dependency",
     "Finding",
+    "FindingDeduplicator",
     "FindingType",
     "GuardianShield",
     "GuardianShieldMCPServer",
+    "OsvCache",
+    "ProjectConfig",
+    "Range",
+    "Remediation",
     "SafetyProfile",
     "ScannerConfig",
     "Severity",
+    "check_dependencies",
+    "discover_config",
 ]

@@ -33,6 +33,7 @@ import sys
 from typing import Any
 
 from .core import GuardianShield
+from .osv import Dependency, OsvCache, check_dependencies
 from .profiles import list_profiles
 
 # ---------------------------------------------------------------------------
@@ -55,7 +56,7 @@ MCP_PROTOCOL_VERSION = "2024-11-05"
 
 SERVER_INFO = {
     "name": "guardianshield",
-    "version": "0.1.0",
+    "version": "0.2.0",
 }
 
 # ---------------------------------------------------------------------------
@@ -251,6 +252,137 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {},
         },
     },
+    {
+        "name": "scan_file",
+        "description": (
+            "Scan a single source file for vulnerabilities and secrets. "
+            "Auto-detects language from file extension. Returns findings "
+            "with line numbers, severity, CWE IDs, and remediation."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Absolute or relative path to the file.",
+                },
+                "language": {
+                    "type": "string",
+                    "description": "Optional language hint (auto-detected from extension).",
+                },
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "scan_directory",
+        "description": (
+            "Recursively scan a directory for vulnerabilities and secrets. "
+            "Supports extension filtering, exclude patterns, and reports "
+            "progress. Returns all findings across all scanned files."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Root directory to scan.",
+                },
+                "extensions": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": 'File extensions to include (e.g. [".py", ".js"]).',
+                },
+                "exclude": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": 'Glob patterns to skip (e.g. ["node_modules/*"]).',
+                },
+            },
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "test_pattern",
+        "description": (
+            "Test a regex pattern against sample code. Returns match "
+            "details including positions and matched text. Useful for "
+            "developing and debugging custom vulnerability patterns."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "regex": {
+                    "type": "string",
+                    "description": "The regex pattern to test.",
+                },
+                "sample": {
+                    "type": "string",
+                    "description": "Sample code to test against.",
+                },
+                "language": {
+                    "type": "string",
+                    "description": "Optional language context for the pattern.",
+                },
+            },
+            "required": ["regex", "sample"],
+        },
+    },
+    {
+        "name": "check_dependencies",
+        "description": (
+            "Check package dependencies for known vulnerabilities using "
+            "the OSV.dev database. Provide a list of packages with names, "
+            "versions, and ecosystems (PyPI or npm)."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "dependencies": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "name": {"type": "string"},
+                            "version": {"type": "string"},
+                            "ecosystem": {
+                                "type": "string",
+                                "enum": ["PyPI", "npm"],
+                                "default": "PyPI",
+                            },
+                        },
+                        "required": ["name", "version"],
+                    },
+                    "description": "List of dependencies to check.",
+                },
+            },
+            "required": ["dependencies"],
+        },
+    },
+    {
+        "name": "sync_vulnerabilities",
+        "description": (
+            "Sync the local OSV vulnerability database for a given "
+            "ecosystem. Call this to update the cache before checking "
+            "dependencies."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "ecosystem": {
+                    "type": "string",
+                    "description": "Ecosystem to sync (PyPI or npm).",
+                    "enum": ["PyPI", "npm"],
+                },
+                "packages": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional list of package names to sync.",
+                },
+            },
+            "required": ["ecosystem"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -330,8 +462,14 @@ class GuardianShieldMCPServer:
     following the Model Context Protocol specification.
     """
 
-    def __init__(self, shield: GuardianShield | None = None) -> None:
+    def __init__(
+        self,
+        shield: GuardianShield | None = None,
+        redact_responses: bool = False,
+    ) -> None:
         self._shield: GuardianShield | None = shield
+        self._redact = redact_responses
+        self._osv_cache: OsvCache | None = None
         self._initialized = False
         logger.info("GuardianShieldMCPServer created (shield=%r)", self._shield)
 
@@ -483,6 +621,11 @@ class GuardianShieldMCPServer:
             "audit_log": self._tool_audit_log,
             "get_findings": self._tool_get_findings,
             "shield_status": self._tool_shield_status,
+            "scan_file": self._tool_scan_file,
+            "scan_directory": self._tool_scan_directory,
+            "test_pattern": self._tool_test_pattern,
+            "check_dependencies": self._tool_check_dependencies,
+            "sync_vulnerabilities": self._tool_sync_vulnerabilities,
         }
 
         handler = tool_handlers.get(tool_name)
@@ -620,7 +763,7 @@ class GuardianShieldMCPServer:
         findings = self._shield.scan_code(code, file_path=file_path, language=language)
         result = {
             "finding_count": len(findings),
-            "findings": [f.to_dict() for f in findings],
+            "findings": [f.to_dict() for f in self._maybe_redact(findings)],
         }
         return self._tool_success(json.dumps(result, indent=2))
 
@@ -633,7 +776,7 @@ class GuardianShieldMCPServer:
         findings = self._shield.scan_input(text)
         result = {
             "finding_count": len(findings),
-            "findings": [f.to_dict() for f in findings],
+            "findings": [f.to_dict() for f in self._maybe_redact(findings)],
         }
         return self._tool_success(json.dumps(result, indent=2))
 
@@ -646,7 +789,7 @@ class GuardianShieldMCPServer:
         findings = self._shield.scan_output(text)
         result = {
             "finding_count": len(findings),
-            "findings": [f.to_dict() for f in findings],
+            "findings": [f.to_dict() for f in self._maybe_redact(findings)],
         }
         return self._tool_success(json.dumps(result, indent=2))
 
@@ -660,7 +803,7 @@ class GuardianShieldMCPServer:
         findings = self._shield.check_secrets(text, file_path=file_path)
         result = {
             "finding_count": len(findings),
-            "findings": [f.to_dict() for f in findings],
+            "findings": [f.to_dict() for f in self._maybe_redact(findings)],
         }
         return self._tool_success(json.dumps(result, indent=2))
 
@@ -724,7 +867,179 @@ class GuardianShieldMCPServer:
     def _tool_shield_status(self, args: dict[str, Any]) -> dict[str, Any]:
         assert self._shield is not None
         status = self._shield.status()
+        status["version"] = SERVER_INFO["version"]
+        # Include OSV cache stats if available.
+        if self._osv_cache is not None:
+            try:
+                status["osv_cache"] = self._osv_cache.stats()
+            except Exception:
+                status["osv_cache"] = {"error": "unavailable"}
+        status["capabilities"] = [
+            "scan_code", "scan_input", "scan_output", "check_secrets",
+            "scan_file", "scan_directory", "test_pattern",
+            "check_dependencies", "sync_vulnerabilities",
+        ]
         return self._tool_success(json.dumps(status, indent=2))
+
+    def _tool_scan_file(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        path = args.get("path")
+        if not path or not isinstance(path, str):
+            return self._tool_error("'path' is required.")
+
+        language = args.get("language")
+        try:
+            findings = self._shield.scan_file(path, language=language)
+        except FileNotFoundError:
+            return self._tool_error(f"File not found: {path}")
+        except IsADirectoryError:
+            return self._tool_error(f"Path is a directory: {path}")
+
+        result = {
+            "file": path,
+            "finding_count": len(findings),
+            "findings": [f.to_dict() for f in self._maybe_redact(findings)],
+        }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_scan_directory(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        path = args.get("path")
+        if not path or not isinstance(path, str):
+            return self._tool_error("'path' is required.")
+
+        extensions = args.get("extensions")
+        exclude = args.get("exclude")
+
+        def _on_progress(fpath: str, done: int, total: int) -> None:
+            self._send_notification(
+                "guardianshield/scanProgress",
+                {"file": fpath, "done": done, "total": total},
+            )
+
+        def _on_finding(f: Any) -> None:
+            self._send_notification(
+                "guardianshield/finding",
+                {"finding": f.to_dict()},
+            )
+
+        try:
+            findings = self._shield.scan_directory(
+                path,
+                extensions=extensions,
+                exclude=exclude,
+                on_progress=_on_progress,
+                on_finding=_on_finding,
+            )
+        except NotADirectoryError:
+            return self._tool_error(f"Not a directory: {path}")
+
+        result = {
+            "directory": path,
+            "finding_count": len(findings),
+            "findings": [f.to_dict() for f in self._maybe_redact(findings)],
+        }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_test_pattern(self, args: dict[str, Any]) -> dict[str, Any]:
+        import re as _re
+
+        regex = args.get("regex")
+        sample = args.get("sample")
+        if not regex or not isinstance(regex, str):
+            return self._tool_error("'regex' is required.")
+        if not sample or not isinstance(sample, str):
+            return self._tool_error("'sample' is required.")
+
+        language = args.get("language", "")
+
+        try:
+            compiled = _re.compile(regex)
+        except _re.error as exc:
+            return self._tool_error(f"Invalid regex: {exc}")
+
+        matches = []
+        for line_number, line in enumerate(sample.splitlines(), start=1):
+            for m in compiled.finditer(line):
+                matches.append({
+                    "line": line_number,
+                    "start": m.start(),
+                    "end": m.end(),
+                    "text": m.group(0),
+                    "groups": list(m.groups()),
+                })
+
+        result = {
+            "regex": regex,
+            "language": language,
+            "match_count": len(matches),
+            "matches": matches,
+        }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_check_dependencies(self, args: dict[str, Any]) -> dict[str, Any]:
+        deps_raw = args.get("dependencies")
+        if not deps_raw or not isinstance(deps_raw, list):
+            return self._tool_error("'dependencies' is required.")
+
+        deps = []
+        for d in deps_raw:
+            name = d.get("name")
+            version = d.get("version")
+            if not name or not version:
+                return self._tool_error("Each dependency needs 'name' and 'version'.")
+            ecosystem = d.get("ecosystem", "PyPI")
+            deps.append(Dependency(name=name, version=version, ecosystem=ecosystem))
+
+        if self._osv_cache is None:
+            self._osv_cache = OsvCache()
+
+        findings = check_dependencies(deps, cache=self._osv_cache)
+        result = {
+            "finding_count": len(findings),
+            "findings": [f.to_dict() for f in self._maybe_redact(findings)],
+        }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_sync_vulnerabilities(self, args: dict[str, Any]) -> dict[str, Any]:
+        ecosystem = args.get("ecosystem")
+        if not ecosystem or not isinstance(ecosystem, str):
+            return self._tool_error("'ecosystem' is required.")
+
+        packages = args.get("packages")
+
+        if self._osv_cache is None:
+            self._osv_cache = OsvCache()
+
+        try:
+            self._osv_cache.sync(
+                ecosystem=ecosystem,
+                packages=packages,
+            )
+        except Exception as exc:
+            return self._tool_error(f"Sync failed: {exc}")
+
+        stats = self._osv_cache.stats()
+        result = {
+            "message": f"Synced {ecosystem} vulnerabilities.",
+            "stats": stats,
+        }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    # ------------------------------------------------------------------
+    # Redaction
+    # ------------------------------------------------------------------
+
+    def _maybe_redact(self, findings: list) -> list:
+        """Optionally redact matched_text in findings."""
+        if not self._redact:
+            return findings
+        import hashlib as _hl
+        for f in findings:
+            if f.matched_text:
+                h = _hl.sha256(f.matched_text.encode("utf-8")).hexdigest()[:12]
+                f.matched_text = f"[REDACTED:{h}]"
+        return findings
 
     # ------------------------------------------------------------------
     # Response helpers
@@ -742,6 +1057,15 @@ class GuardianShieldMCPServer:
             "content": [{"type": "text", "text": json.dumps({"error": message})}],
             "isError": True,
         }
+
+    def _send_notification(self, method: str, params: dict[str, Any]) -> None:
+        """Send a JSON-RPC notification (no id, no response expected)."""
+        notification = {
+            "jsonrpc": JSONRPC_VERSION,
+            "method": method,
+            "params": params,
+        }
+        self._write_message(notification)
 
     def _send_result(self, msg_id: Any, result: Any) -> None:
         response = {

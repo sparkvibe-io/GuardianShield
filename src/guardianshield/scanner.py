@@ -7,204 +7,27 @@ traversal, and use of insecure functions.
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Optional
 
-from guardianshield.findings import Finding, FindingType, Severity
+from guardianshield.findings import Finding, FindingType, Range, Remediation, Severity
+from guardianshield.patterns import (
+    COMMON_PATTERNS,
+    EXTENSION_MAP,
+    LANGUAGE_PATTERNS,
+    REMEDIATION_MAP,
+)
+from guardianshield.patterns.python import PYTHON_PATTERNS
 
 # ---------------------------------------------------------------------------
-# Vulnerability patterns
+# Backward-compatible module-level pattern list.
+# Code that imports ``VULNERABILITY_PATTERNS`` directly will still get the
+# combined common + Python patterns (the original default).
 # ---------------------------------------------------------------------------
-# Each entry: (name, compiled_regex, finding_type, severity, description)
-
 VULNERABILITY_PATTERNS: list[
-    tuple[str, re.Pattern[str], FindingType, Severity, str]
-] = [
-    # ------------------------------------------------------------------
-    # 1. SQL Injection - string formatting in SQL queries
-    # ------------------------------------------------------------------
-    (
-        "sql_injection_string_format",
-        re.compile(
-            r"""(?:["'])\s*SELECT\s+.+?(?:"""
-            r"""\+\s*\w"""  # "SELECT ... " + var
-            r"""|%s["']\s*%\s*\w"""  # "SELECT ... %s" % var
-            r""")""",
-            re.IGNORECASE,
-        ),
-        FindingType.SQL_INJECTION,
-        Severity.HIGH,
-        "Possible SQL injection via string formatting in query construction.",
-    ),
-    # f-string SQL injection
-    (
-        "sql_injection_fstring",
-        re.compile(
-            r"""f["'](?:[^"']*?)SELECT\s+.+?\{""",
-            re.IGNORECASE,
-        ),
-        FindingType.SQL_INJECTION,
-        Severity.HIGH,
-        "Possible SQL injection via f-string in query construction.",
-    ),
-    # ------------------------------------------------------------------
-    # 2. SQL Injection - raw/unsanitized queries via cursor.execute
-    # ------------------------------------------------------------------
-    (
-        "sql_injection_raw_query",
-        re.compile(
-            r"""(?:cursor|conn(?:ection)?|db)\s*\.\s*execute\s*\(\s*["'].*?["']\s*\+""",
-            re.IGNORECASE,
-        ),
-        FindingType.SQL_INJECTION,
-        Severity.CRITICAL,
-        "SQL injection via unsanitized string concatenation in cursor.execute().",
-    ),
-    # cursor.execute with f-string
-    (
-        "sql_injection_raw_query_fstring",
-        re.compile(
-            r"""(?:cursor|conn(?:ection)?|db)\s*\.\s*execute\s*\(\s*f["']""",
-            re.IGNORECASE,
-        ),
-        FindingType.SQL_INJECTION,
-        Severity.CRITICAL,
-        "SQL injection via f-string in cursor.execute().",
-    ),
-    # ------------------------------------------------------------------
-    # 3. XSS - innerHTML assignment
-    # ------------------------------------------------------------------
-    (
-        "xss_innerhtml",
-        re.compile(r"""\.innerHTML\s*="""),
-        FindingType.XSS,
-        Severity.MEDIUM,
-        "Potential XSS via innerHTML assignment.",
-    ),
-    # ------------------------------------------------------------------
-    # 4. XSS - document.write()
-    # ------------------------------------------------------------------
-    (
-        "xss_document_write",
-        re.compile(r"""document\.write\s*\("""),
-        FindingType.XSS,
-        Severity.MEDIUM,
-        "Potential XSS via document.write().",
-    ),
-    # ------------------------------------------------------------------
-    # 5. XSS - unsanitized template rendering
-    # ------------------------------------------------------------------
-    (
-        "xss_template_safe",
-        re.compile(r"""\|\s*safe\b"""),
-        FindingType.XSS,
-        Severity.HIGH,
-        "Potential XSS via |safe filter bypassing template auto-escaping.",
-    ),
-    (
-        "xss_template_autoescape_off",
-        re.compile(r"""\{%\s*autoescape\s+off\s*%\}"""),
-        FindingType.XSS,
-        Severity.HIGH,
-        "Potential XSS via disabled auto-escaping in template.",
-    ),
-    (
-        "xss_markup",
-        re.compile(r"""Markup\s*\("""),
-        FindingType.XSS,
-        Severity.HIGH,
-        "Potential XSS via Markup() wrapping raw HTML.",
-    ),
-    # ------------------------------------------------------------------
-    # 6. Command Injection - os.system()
-    # ------------------------------------------------------------------
-    (
-        "command_injection_os_system",
-        re.compile(r"""os\.system\s*\("""),
-        FindingType.COMMAND_INJECTION,
-        Severity.HIGH,
-        "Command injection risk via os.system().",
-    ),
-    # ------------------------------------------------------------------
-    # 7. Command Injection - subprocess with shell=True
-    # ------------------------------------------------------------------
-    (
-        "command_injection_subprocess_shell",
-        re.compile(r"""subprocess\.(?:call|run|Popen|check_output|check_call)\s*\(.*shell\s*=\s*True"""),
-        FindingType.COMMAND_INJECTION,
-        Severity.HIGH,
-        "Command injection risk via subprocess with shell=True.",
-    ),
-    # ------------------------------------------------------------------
-    # 8. Command Injection - eval()/exec() with non-literal args
-    # ------------------------------------------------------------------
-    (
-        "command_injection_eval",
-        re.compile(r"""\beval\s*\(\s*(?!["']\s*\))"""),
-        FindingType.COMMAND_INJECTION,
-        Severity.CRITICAL,
-        "Code execution risk via eval() with non-literal argument.",
-    ),
-    (
-        "command_injection_exec",
-        re.compile(r"""\bexec\s*\(\s*(?!["']\s*\))"""),
-        FindingType.COMMAND_INJECTION,
-        Severity.CRITICAL,
-        "Code execution risk via exec() with non-literal argument.",
-    ),
-    # ------------------------------------------------------------------
-    # 9. Path Traversal - open() with user input concatenation
-    # ------------------------------------------------------------------
-    (
-        "path_traversal_open",
-        re.compile(r"""\bopen\s*\(\s*(?:\w+\s*\+|f["'])"""),
-        FindingType.PATH_TRAVERSAL,
-        Severity.MEDIUM,
-        "Path traversal risk via open() with concatenated user input.",
-    ),
-    # ------------------------------------------------------------------
-    # 10. Path Traversal - os.path.join with user-controlled segments
-    # ------------------------------------------------------------------
-    (
-        "path_traversal_os_path_join",
-        re.compile(r"""os\.path\.join\s*\(.*(?:request|user_input|input|params|args|data)\b"""),
-        FindingType.PATH_TRAVERSAL,
-        Severity.MEDIUM,
-        "Path traversal risk via os.path.join with potentially user-controlled path segment.",
-    ),
-    # ------------------------------------------------------------------
-    # 11. Insecure Function - pickle.loads() / pickle.load()
-    # ------------------------------------------------------------------
-    (
-        "insecure_pickle",
-        re.compile(r"""pickle\.loads?\s*\("""),
-        FindingType.INSECURE_FUNCTION,
-        Severity.HIGH,
-        "Insecure deserialization via pickle.load(s)() can execute arbitrary code.",
-    ),
-    # ------------------------------------------------------------------
-    # 12. Insecure Function - md5/sha1 for security purposes
-    # ------------------------------------------------------------------
-    (
-        "insecure_hash",
-        re.compile(r"""hashlib\.(?:md5|sha1)\s*\("""),
-        FindingType.INSECURE_FUNCTION,
-        Severity.LOW,
-        "Use of weak hash algorithm (MD5/SHA1) which is unsuitable for security purposes.",
-    ),
-    # ------------------------------------------------------------------
-    # 13. Insecure Function - random module for security
-    # ------------------------------------------------------------------
-    (
-        "insecure_random",
-        re.compile(
-            r"""random\.(?:random|randint|choice|randrange|uniform)\s*\("""
-        ),
-        FindingType.INSECURE_FUNCTION,
-        Severity.MEDIUM,
-        "Use of non-cryptographic random number generator. Use secrets module for security.",
-    ),
-]
+    tuple[str, re.Pattern[str], FindingType, Severity, str, float, list[str]]
+] = COMMON_PATTERNS + PYTHON_PATTERNS
 
 # Lines that are comments and should be skipped.
 _COMMENT_RE = re.compile(r"""^\s*(?:#|//|/\*|\*)""")
@@ -246,8 +69,10 @@ def scan_code(
             findings, ``"medium"`` (default) skips LOW/INFO, ``"high"``
             returns all findings.
         file_path: Optional path of the source file being scanned.
-        language: Optional language hint (currently unused but reserved for
-            future language-specific rules).
+        language: Optional language hint (e.g. ``"python"``, ``"javascript"``).
+            When omitted, the language is inferred from *file_path*'s
+            extension.  If neither is provided, defaults to Python patterns
+            for backward compatibility.
 
     Returns:
         A list of :class:`Finding` instances for detected vulnerabilities.
@@ -256,17 +81,48 @@ def scan_code(
     findings: list[Finding] = []
     lines = code.splitlines()
 
+    # Resolve language
+    resolved_lang = None
+    if language:
+        resolved_lang = language.lower()
+    elif file_path:
+        ext = os.path.splitext(file_path)[1].lower()
+        resolved_lang = EXTENSION_MAP.get(ext)
+
+    # Build pattern list
+    if resolved_lang and resolved_lang in LANGUAGE_PATTERNS:
+        patterns = COMMON_PATTERNS + LANGUAGE_PATTERNS[resolved_lang]
+    else:
+        # Default: common + python (backward compatibility)
+        patterns = COMMON_PATTERNS + PYTHON_PATTERNS
+
     for line_number, line in enumerate(lines, start=1):
         # Skip comment lines
         if _COMMENT_RE.match(line):
             continue
 
-        for name, pattern, finding_type, severity, description in VULNERABILITY_PATTERNS:
+        for name, pattern, finding_type, severity, description, confidence, cwe_ids in patterns:
             if _SEVERITY_ORDER[severity] < min_sev:
                 continue
 
             match = pattern.search(line)
             if match:
+                range_obj = Range(
+                    start_line=line_number - 1,
+                    start_col=match.start(),
+                    end_line=line_number - 1,
+                    end_col=match.end(),
+                )
+                # Attach remediation if available for this pattern.
+                remediation = None
+                rem_data = REMEDIATION_MAP.get(name)
+                if rem_data:
+                    remediation = Remediation(
+                        description=rem_data["description"],
+                        before=rem_data.get("before", ""),
+                        after=rem_data.get("after", ""),
+                        auto_fixable=rem_data.get("auto_fixable", False),
+                    )
                 findings.append(
                     Finding(
                         finding_type=finding_type,
@@ -277,6 +133,10 @@ def scan_code(
                         file_path=file_path,
                         scanner="code_scanner",
                         metadata={"pattern_name": name},
+                        range=range_obj,
+                        confidence=confidence,
+                        cwe_ids=list(cwe_ids),
+                        remediation=remediation,
                     )
                 )
 
