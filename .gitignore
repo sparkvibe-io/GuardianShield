@@ -40,3 +40,10 @@ site/
 
 # Ruff
 .ruff_cache/
+
+# MemoryMesh
+.memorymesh/
+
+# Local docs/notes
+GEMINI.md
+docs/Critique/
