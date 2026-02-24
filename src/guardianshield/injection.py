@@ -11,14 +11,14 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from guardianshield.findings import Finding, FindingType, Severity
+from guardianshield.findings import Finding, FindingType, Range, Severity
 
 # ---------------------------------------------------------------------------
 # Compiled detection patterns
 # ---------------------------------------------------------------------------
-# Each entry: (name, compiled_regex, severity, description)
+# Each entry: (name, compiled_regex, severity, description, confidence, cwe_ids)
 
-_PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
+_PATTERNS: list[tuple[str, re.Pattern[str], Severity, str, float, list[str]]] = [
     # 1. Instruction Override
     (
         "instruction_override",
@@ -31,6 +31,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
         ),
         Severity.CRITICAL,
         "Attempt to override or nullify the model's existing instructions.",
+        0.9,
+        ["CWE-77"],
     ),
     # 2. Role Hijacking
     (
@@ -45,6 +47,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
         ),
         Severity.HIGH,
         "Attempt to reassign the model's role or persona.",
+        0.6,
+        ["CWE-77"],
     ),
     # 3. System Prompt Extraction
     (
@@ -60,6 +64,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
         ),
         Severity.HIGH,
         "Attempt to extract the model's system prompt or instructions.",
+        0.8,
+        ["CWE-77"],
     ),
     # 4. Delimiter / Separator Abuse
     (
@@ -70,6 +76,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
         ),
         Severity.MEDIUM,
         "Suspicious use of repeated delimiters that may break prompt context.",
+        0.4,
+        ["CWE-77"],
     ),
     # 5. ChatML Injection
     (
@@ -85,6 +93,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
         ),
         Severity.CRITICAL,
         "ChatML or special token injection that may manipulate conversation structure.",
+        0.95,
+        ["CWE-77"],
     ),
     # 6. Jailbreak Keywords
     (
@@ -99,6 +109,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
         ),
         Severity.HIGH,
         "Jailbreak attempt to remove safety restrictions.",
+        0.7,
+        ["CWE-77"],
     ),
     # 7. Information Extraction
     (
@@ -113,6 +125,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
         ),
         Severity.MEDIUM,
         "Attempt to enumerate the model's internal tools or capabilities.",
+        0.5,
+        ["CWE-77"],
     ),
     # 8. Encoding Evasion
     (
@@ -128,6 +142,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
         ),
         Severity.MEDIUM,
         "Attempt to use encoding schemes to evade content filters.",
+        0.5,
+        ["CWE-77"],
     ),
     # 9. Instruction Tags
     (
@@ -144,6 +160,8 @@ _PATTERNS: list[tuple[str, re.Pattern[str], Severity, str]] = [
         ),
         Severity.HIGH,
         "Injection of instruction/system tags to manipulate prompt boundaries.",
+        0.85,
+        ["CWE-77"],
     ),
 ]
 
@@ -170,6 +188,14 @@ def _line_number_for_position(text: str, pos: int) -> int:
     return text[:pos].count("\n") + 1
 
 
+def _position_to_line_col(text: str, pos: int) -> tuple[int, int]:
+    """Convert absolute position to 0-based (line, col)."""
+    line = text[:pos].count("\n")
+    last_nl = text.rfind("\n", 0, pos)
+    col = pos if last_nl == -1 else pos - last_nl - 1
+    return line, col
+
+
 def check_injection(text: str, sensitivity: str = "medium") -> list[Finding]:
     """Scan *text* for prompt injection patterns.
 
@@ -194,7 +220,7 @@ def check_injection(text: str, sensitivity: str = "medium") -> list[Finding]:
     threshold = _SENSITIVITY_THRESHOLD.get(sensitivity, _SENSITIVITY_THRESHOLD["medium"])
     findings: list[Finding] = []
 
-    for name, pattern, severity, description in _PATTERNS:
+    for name, pattern, severity, description, confidence, cwe_ids in _PATTERNS:
         # Apply sensitivity filter early to avoid unnecessary work.
         if _SEVERITY_RANK[severity] < threshold:
             continue
@@ -205,6 +231,15 @@ def check_injection(text: str, sensitivity: str = "medium") -> list[Finding]:
                 matched_text = matched_text[:100]
 
             line_number = _line_number_for_position(text, match.start())
+
+            start_line, start_col = _position_to_line_col(text, match.start())
+            end_line, end_col = _position_to_line_col(text, match.end())
+            range_obj = Range(
+                start_line=start_line,
+                start_col=start_col,
+                end_line=end_line,
+                end_col=end_col,
+            )
 
             metadata: dict[str, Any] = {"injection_type": name}
 
@@ -217,6 +252,9 @@ def check_injection(text: str, sensitivity: str = "medium") -> list[Finding]:
                     line_number=line_number,
                     scanner="injection_detector",
                     metadata=metadata,
+                    range=range_obj,
+                    confidence=confidence,
+                    cwe_ids=list(cwe_ids),
                 )
             )
 

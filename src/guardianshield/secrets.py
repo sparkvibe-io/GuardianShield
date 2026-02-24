@@ -11,23 +11,25 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
-from guardianshield.findings import Finding, FindingType, Severity
+from guardianshield.findings import Finding, FindingType, Range, Severity
 
 # ---------------------------------------------------------------------------
 # Compiled patterns
 # ---------------------------------------------------------------------------
-# Each entry: (name, compiled_regex, severity, description)
+# Each entry: (name, compiled_regex, severity, description, confidence, cwe_ids)
 #
 # Patterns are compiled at module level so the cost is paid once on import.
 # ---------------------------------------------------------------------------
 
-_SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
+_SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, float, List[str]]] = [
     # 1. AWS Access Key ID  (always starts with AKIA, 20 uppercase alphanumeric)
     (
         "AWS Access Key",
         re.compile(r"(?<![A-Za-z0-9/+=])(AKIA[0-9A-Z]{16})(?![A-Za-z0-9/+=])"),
         Severity.CRITICAL,
         "AWS access key ID detected",
+        0.95,
+        ["CWE-798"],
     ),
     # 2. AWS Secret Access Key (40-char base64-ish, usually follows known prefixes)
     (
@@ -37,6 +39,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         ),
         Severity.CRITICAL,
         "AWS secret access key detected",
+        0.9,
+        ["CWE-798"],
     ),
     # 3. GitHub tokens (classic PATs, fine-grained PATs, OAuth, etc.)
     (
@@ -46,6 +50,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         ),
         Severity.HIGH,
         "GitHub personal access token detected",
+        0.95,
+        ["CWE-798"],
     ),
     # 4a. Stripe live keys (CRITICAL)
     (
@@ -53,6 +59,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         re.compile(r"(?<![A-Za-z0-9_])(sk_live_[A-Za-z0-9]{24,}|pk_live_[A-Za-z0-9]{24,})"),
         Severity.CRITICAL,
         "Stripe live API key detected",
+        0.95,
+        ["CWE-798"],
     ),
     # 4b. Stripe test keys (HIGH)
     (
@@ -60,6 +68,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         re.compile(r"(?<![A-Za-z0-9_])(sk_test_[A-Za-z0-9]{24,}|pk_test_[A-Za-z0-9]{24,})"),
         Severity.HIGH,
         "Stripe test API key detected",
+        0.9,
+        ["CWE-798"],
     ),
     # 5. Private keys (PEM-encoded)
     (
@@ -69,6 +79,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         ),
         Severity.CRITICAL,
         "Private key detected",
+        0.99,
+        ["CWE-798"],
     ),
     # 6. JSON Web Tokens (three base64url sections separated by dots)
     (
@@ -78,6 +90,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         ),
         Severity.MEDIUM,
         "JSON Web Token detected",
+        0.85,
+        ["CWE-798"],
     ),
     # 7. Slack tokens
     (
@@ -85,6 +99,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         re.compile(r"(?<![A-Za-z0-9_])(xoxb-[A-Za-z0-9\-]{24,}|xoxp-[A-Za-z0-9\-]{24,}|xoxs-[A-Za-z0-9\-]{24,}|xoxa-[A-Za-z0-9\-]{24,})"),
         Severity.HIGH,
         "Slack token detected",
+        0.9,
+        ["CWE-798"],
     ),
     # 8. Generic password assignments  (password = "...", passwd = '...', etc.)
     #    The value must be at least 4 characters and must NOT look like a variable
@@ -96,6 +112,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         ),
         Severity.MEDIUM,
         "Hardcoded password detected in assignment",
+        0.6,
+        ["CWE-798"],
     ),
     # 9. Database connection strings
     (
@@ -105,6 +123,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         ),
         Severity.HIGH,
         "Database/service connection string with potential credentials detected",
+        0.85,
+        ["CWE-798"],
     ),
     # 10. Google API keys  (AIza followed by 35 chars)
     (
@@ -112,6 +132,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         re.compile(r"(?<![A-Za-z0-9])(AIza[A-Za-z0-9_\-]{35})(?![A-Za-z0-9_\-])"),
         Severity.HIGH,
         "Google API key detected",
+        0.9,
+        ["CWE-798"],
     ),
     # 11. Generic API key / token assignments
     (
@@ -121,6 +143,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         ),
         Severity.MEDIUM,
         "Generic API key or token detected in assignment",
+        0.5,
+        ["CWE-798"],
     ),
     # 12. Telegram Bot tokens  (<bot-id>:AA... where bot-id is numeric)
     (
@@ -128,6 +152,8 @@ _SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str]] = [
         re.compile(r"(?<![A-Za-z0-9])(\d{8,10}:AA[A-Za-z0-9_\-]{33,})(?![A-Za-z0-9_\-])"),
         Severity.HIGH,
         "Telegram bot token detected",
+        0.9,
+        ["CWE-798"],
     ),
 ]
 
@@ -205,7 +231,7 @@ def check_secrets(
 
     lines = text.splitlines()
     for line_idx, line in enumerate(lines, start=1):
-        for name, pattern, severity, description in _SECRET_PATTERNS:
+        for name, pattern, severity, description, confidence, cwe_ids in _SECRET_PATTERNS:
             # Skip if below sensitivity threshold
             if _SEVERITY_ORDER[severity] < threshold:
                 continue
@@ -215,6 +241,12 @@ def check_secrets(
                 # full match.
                 raw = match.group(1) if match.lastindex and match.lastindex >= 1 else match.group(0)
                 redacted = _redact(raw, name)
+                range_obj = Range(
+                    start_line=line_idx - 1,
+                    start_col=match.start(),
+                    end_line=line_idx - 1,
+                    end_col=match.end(),
+                )
                 findings.append(
                     Finding(
                         finding_type=FindingType.SECRET,
@@ -225,6 +257,9 @@ def check_secrets(
                         file_path=file_path,
                         scanner="secrets",
                         metadata={"secret_type": name},
+                        range=range_obj,
+                        confidence=confidence,
+                        cwe_ids=list(cwe_ids),
                     )
                 )
 

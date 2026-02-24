@@ -11,18 +11,19 @@ from __future__ import annotations
 import re
 from typing import List, Optional, Tuple
 
-from guardianshield.findings import Finding, FindingType, Severity
+from guardianshield.findings import Finding, FindingType, Range, Severity
 
 # ---------------------------------------------------------------------------
 # Pattern definitions
 # ---------------------------------------------------------------------------
-# Each entry is (compiled_regex, human-readable description).
+# Each entry is (compiled_regex, human-readable description, confidence,
+#                cwe_ids).
 # All patterns are case-insensitive and use word boundaries where appropriate
 # to reduce false positives on partial matches.
 
 _FLAGS = re.IGNORECASE
 
-ContentPattern = Tuple[re.Pattern[str], str]
+ContentPattern = Tuple[re.Pattern[str], str, float, List[str]]
 
 CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
     # ------------------------------------------------------------------
@@ -38,6 +39,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "instructions_to_kill",
+            0.8,
+            [],
         ),
         (
             re.compile(
@@ -46,6 +49,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "intent_to_harm",
+            0.8,
+            [],
         ),
         (
             re.compile(
@@ -54,6 +59,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "encouraging_violence",
+            0.7,
+            [],
         ),
         (
             re.compile(
@@ -61,6 +68,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "best_methods_violence",
+            0.7,
+            [],
         ),
         (
             re.compile(
@@ -68,6 +77,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "weapon_construction",
+            0.8,
+            [],
         ),
     ],
     # ------------------------------------------------------------------
@@ -82,6 +93,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "self_harm_instructions",
+            0.9,
+            [],
         ),
         (
             re.compile(
@@ -92,6 +105,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "encouraging_self_harm",
+            0.9,
+            [],
         ),
         (
             re.compile(
@@ -101,6 +116,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "self_harm_best_methods",
+            0.8,
+            [],
         ),
         (
             re.compile(
@@ -110,6 +127,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "self_harm_intent",
+            0.9,
+            [],
         ),
         (
             re.compile(
@@ -117,6 +136,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "lethal_dosage_info",
+            0.8,
+            [],
         ),
     ],
     # ------------------------------------------------------------------
@@ -133,6 +154,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "drug_manufacturing",
+            0.8,
+            [],
         ),
         (
             re.compile(
@@ -142,6 +165,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "hacking_instructions",
+            0.7,
+            [],
         ),
         (
             re.compile(
@@ -152,6 +177,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "fraud_instructions",
+            0.7,
+            [],
         ),
         (
             re.compile(
@@ -161,6 +188,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "forgery_instructions",
+            0.7,
+            [],
         ),
         (
             re.compile(
@@ -169,6 +198,8 @@ CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
                 _FLAGS,
             ),
             "theft_instructions",
+            0.8,
+            [],
         ),
     ],
 }
@@ -240,12 +271,19 @@ def check_content(
         patterns = CONTENT_PATTERNS[category]
 
         for line_idx, line in enumerate(lines, start=1):
-            for pattern, description in patterns:
+            for pattern, description, confidence, cwe_ids in patterns:
                 match = pattern.search(line)
                 if match:
                     matched_text = match.group()
                     if len(matched_text) > 100:
                         matched_text = matched_text[:100]
+
+                    range_obj = Range(
+                        start_line=line_idx - 1,
+                        start_col=match.start(),
+                        end_line=line_idx - 1,
+                        end_col=match.end(),
+                    )
 
                     findings.append(
                         Finding(
@@ -262,6 +300,9 @@ def check_content(
                                 "category": category,
                                 "pattern_name": description,
                             },
+                            range=range_obj,
+                            confidence=confidence,
+                            cwe_ids=list(cwe_ids),
                         )
                     )
 

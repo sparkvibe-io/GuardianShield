@@ -11,20 +11,23 @@ from __future__ import annotations
 import re
 from typing import List, Tuple
 
-from guardianshield.findings import Finding, FindingType, Severity
+from guardianshield.findings import Finding, FindingType, Range, Severity
 
 # ---------------------------------------------------------------------------
 # Compiled regex patterns for PII detection
-# Each entry: (name, compiled_regex, severity, description, pii_type_str)
+# Each entry: (name, compiled_regex, severity, description, pii_type_str,
+#              confidence, cwe_ids)
 # ---------------------------------------------------------------------------
 
-PII_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, str]] = [
+PII_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, str, float, List[str]]] = [
     (
         "Email Address",
         re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"),
         Severity.MEDIUM,
         "Email address detected",
         "email",
+        0.85,
+        ["CWE-359"],
     ),
     (
         "SSN",
@@ -32,6 +35,8 @@ PII_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, str]] = [
         Severity.CRITICAL,
         "Social Security Number detected",
         "ssn",
+        0.9,
+        ["CWE-359"],
     ),
     (
         "Credit Card Number",
@@ -39,6 +44,8 @@ PII_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, str]] = [
         Severity.CRITICAL,
         "Credit card number detected",
         "credit_card",
+        0.75,
+        ["CWE-359"],
     ),
     (
         "US Phone Number",
@@ -50,6 +57,8 @@ PII_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, str]] = [
         Severity.MEDIUM,
         "US phone number detected",
         "phone",
+        0.65,
+        ["CWE-359"],
     ),
     (
         "IPv4 Address",
@@ -60,6 +69,8 @@ PII_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, str]] = [
         Severity.LOW,
         "IPv4 address detected",
         "ip_address",
+        0.7,
+        ["CWE-359"],
     ),
     (
         "Date of Birth",
@@ -70,6 +81,8 @@ PII_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, str]] = [
         Severity.MEDIUM,
         "Date of birth detected",
         "date_of_birth",
+        0.6,
+        ["CWE-359"],
     ),
     (
         "Physical Address",
@@ -82,6 +95,8 @@ PII_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, str]] = [
         Severity.LOW,
         "Physical address detected",
         "physical_address",
+        0.5,
+        ["CWE-359"],
     ),
 ]
 
@@ -166,10 +181,16 @@ def check_pii(
     findings: list[Finding] = []
 
     for line_number, line in enumerate(text.splitlines(), start=1):
-        for name, pattern, severity, description, pii_type in PII_PATTERNS:
+        for name, pattern, severity, description, pii_type, confidence, cwe_ids in PII_PATTERNS:
             if not _severity_allowed(severity, sensitivity):
                 continue
             for match in pattern.finditer(line):
+                range_obj = Range(
+                    start_line=line_number - 1,
+                    start_col=match.start(),
+                    end_line=line_number - 1,
+                    end_col=match.end(),
+                )
                 findings.append(
                     Finding(
                         finding_type=FindingType.PII_LEAK,
@@ -179,6 +200,9 @@ def check_pii(
                         line_number=line_number,
                         scanner="pii_detector",
                         metadata={"pii_type": pii_type},
+                        range=range_obj,
+                        confidence=confidence,
+                        cwe_ids=list(cwe_ids),
                     )
                 )
 
