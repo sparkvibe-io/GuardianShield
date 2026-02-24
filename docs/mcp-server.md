@@ -5,7 +5,7 @@ description: Set up GuardianShield MCP server with Claude Code, VS Code, Cursor,
 
 # MCP Server Setup
 
-GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **9 tools**, **3 resources**, and **2 prompts** that any MCP-compatible AI client can discover and invoke automatically.
+GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **14 tools**, **3 resources**, and **2 prompts** that any MCP-compatible AI client can discover and invoke automatically.
 
 !!! info "What is MCP?"
     The [Model Context Protocol](https://modelcontextprotocol.io/) is an open standard that lets AI assistants discover and call external tools over a simple JSON-RPC transport. GuardianShield uses the **stdio** transport — the AI editor launches the server process and communicates through stdin/stdout.
@@ -72,7 +72,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Reload the window after saving. The Copilot agent will discover all 9 tools automatically.
+    Reload the window after saving. The Copilot agent will discover all 14 tools automatically.
 
 === "Cursor"
 
@@ -123,7 +123,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Restart Claude Desktop. The 9 tools, 3 resources, and 2 prompts will be available in the conversation.
+    Restart Claude Desktop. The 14 tools, 3 resources, and 2 prompts will be available in the conversation.
 
 === "Generic MCP Client"
 
@@ -140,7 +140,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
 
 ## Tools Reference
 
-GuardianShield exposes 9 MCP tools. Each tool accepts a JSON object of parameters and returns a structured result.
+GuardianShield exposes 14 MCP tools. Each tool accepts a JSON object of parameters and returns a structured result.
 
 ### `scan_code`
 
@@ -308,6 +308,135 @@ Get the health and configuration status of the GuardianShield server.
 
 ---
 
+### `scan_file`
+
+Scan a single source file for vulnerabilities, secrets, and insecure patterns. The language is auto-detected from the file extension.
+
+| Parameter  | Type     | Required | Description                                          |
+|------------|----------|----------|------------------------------------------------------|
+| `path`     | `string` | Yes      | Path to the file to scan                             |
+| `language` | `string` | No       | Override auto-detected language (`python`, `javascript`, etc.) |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "scan_file",
+      "arguments": {
+        "path": "src/auth/login.py"
+      }
+    }
+    ```
+
+**Returns:** List of findings with severity, category, description, line number, CWE IDs, and remediation advice.
+
+---
+
+### `scan_directory`
+
+Recursively scan a directory for vulnerabilities across all supported file types. Emits streaming progress notifications during the scan.
+
+| Parameter    | Type       | Required | Description                                              |
+|--------------|------------|----------|----------------------------------------------------------|
+| `path`       | `string`   | Yes      | Path to the directory to scan                            |
+| `extensions` | `string[]` | No       | File extensions to include (e.g. `[".py", ".js"]`). Default: all supported. |
+| `exclude`    | `string[]` | No       | Directory or file patterns to exclude (e.g. `["node_modules", ".venv"]`). |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "scan_directory",
+      "arguments": {
+        "path": "src/",
+        "extensions": [".py", ".js", ".ts"],
+        "exclude": ["node_modules", "__pycache__"]
+      }
+    }
+    ```
+
+**Returns:** List of findings across all scanned files with a summary of totals by severity. Emits `guardianshield/scanProgress` and `guardianshield/finding` JSON-RPC notifications during the scan.
+
+---
+
+### `test_pattern`
+
+Test a custom regex pattern against sample code. Useful for developing and debugging new vulnerability detection rules.
+
+| Parameter  | Type     | Required | Description                                            |
+|------------|----------|----------|--------------------------------------------------------|
+| `regex`    | `string` | Yes      | The regex pattern to test                              |
+| `sample`   | `string` | Yes      | Sample code to test the pattern against                |
+| `language` | `string` | No       | Language context for the test (e.g. `"python"`)        |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "test_pattern",
+      "arguments": {
+        "regex": "unsafe_function\\s*\\(",
+        "sample": "result = unsafe_function(user_input)"
+      }
+    }
+    ```
+
+**Returns:** Match results with positions, matched text, and line numbers.
+
+---
+
+### `check_dependencies`
+
+Check project dependencies for known CVEs using a local OSV.dev vulnerability cache. Supports PyPI and npm ecosystems.
+
+| Parameter      | Type     | Required | Description                                                |
+|----------------|----------|----------|------------------------------------------------------------|
+| `dependencies` | `array`  | Yes      | List of dependency objects: `{name, version, ecosystem}`   |
+
+Each dependency object:
+
+| Field       | Type     | Required | Description                                    |
+|-------------|----------|----------|------------------------------------------------|
+| `name`      | `string` | Yes      | Package name (e.g. `"requests"`, `"lodash"`)   |
+| `version`   | `string` | Yes      | Package version (e.g. `"2.28.0"`)              |
+| `ecosystem` | `string` | Yes      | Package ecosystem: `"PyPI"` or `"npm"`         |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "check_dependencies",
+      "arguments": {
+        "dependencies": [
+          {"name": "requests", "version": "2.28.0", "ecosystem": "PyPI"},
+          {"name": "lodash", "version": "4.17.20", "ecosystem": "npm"}
+        ]
+      }
+    }
+    ```
+
+**Returns:** List of CVE findings with severity, advisory details, affected version ranges, and remediation advice.
+
+---
+
+### `sync_vulnerabilities`
+
+Sync the local OSV vulnerability database from OSV.dev. The local cache enables offline dependency scanning.
+
+| Parameter    | Type       | Required | Description                                                    |
+|--------------|------------|----------|----------------------------------------------------------------|
+| `ecosystems` | `string[]` | No       | Ecosystems to sync. Default: `["PyPI", "npm"]`.               |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "sync_vulnerabilities",
+      "arguments": {
+        "ecosystems": ["PyPI", "npm"]
+      }
+    }
+    ```
+
+**Returns:** Sync status including number of vulnerabilities cached per ecosystem and last sync timestamp.
+
+---
+
 ## Resources
 
 GuardianShield exposes 3 MCP resources. Resources provide read-only data that AI clients can fetch at any time.
@@ -415,7 +544,7 @@ The client sends `initialize` to negotiate capabilities, then confirms with `ini
     },
     "serverInfo": {
       "name": "guardianshield",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   }
 }

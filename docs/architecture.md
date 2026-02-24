@@ -15,17 +15,22 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
 [Any MCP Client: Claude Code / VS Code / Cursor / etc.]
     |  JSON-RPC over stdin/stdout
     |
-[GuardianShieldMCPServer]     <- mcp_server.py
+[GuardianShieldMCPServer]         <- mcp_server.py (14 tools)
     |
-[GuardianShield core]         <- core.py (orchestrator)
+[GuardianShield core]             <- core.py (orchestrator)
     |
-    |-- scan_code()  -> scanner.py + secrets.py  -> Finding[]
-    |-- scan_input() -> injection.py             -> Finding[]
-    |-- scan_output()-> pii.py + content.py      -> Finding[]
-    |-- check_secrets() -> secrets.py            -> Finding[]
+    |-- scan_code()      -> scanner.py (patterns/) + secrets.py  -> Finding[]
+    |-- scan_file()      -> auto-detect lang -> scan_code()      -> Finding[]
+    |-- scan_directory() -> walk + scan_file() per file          -> Finding[]
+    |-- scan_input()     -> injection.py                         -> Finding[]
+    |-- scan_output()    -> pii.py + content.py                  -> Finding[]
+    |-- check_secrets()  -> secrets.py                           -> Finding[]
+    |-- check_deps()     -> osv.py -> SQLite cache               -> Finding[]
     |
-    |-- [AuditLog]   -> SQLite (audit.py)
-    '-- [SafetyProfile] <- profiles.py + YAML
+    |-- [AuditLog]       -> SQLite (audit.py)
+    |-- [ProjectConfig]  <- config.py (.guardianshield.json/yaml)
+    |-- [Deduplicator]   <- dedup.py (SHA-256 fingerprints)
+    '-- [SafetyProfile]  <- profiles.py + YAML
 ```
 
 The architecture has three distinct layers:
@@ -40,15 +45,15 @@ The architecture has three distinct layers:
 
 ### `mcp_server.py` — MCP Server
 
-Hand-rolled JSON-RPC 2.0 server that implements the full MCP protocol without any SDK dependency. Reads from `stdin`, writes to `stdout`, and handles `initialize`, `tools/list`, `tools/call`, and all required MCP lifecycle methods. Exposes 9 security tools to any MCP-compatible client.
+Hand-rolled JSON-RPC 2.0 server that implements the full MCP protocol without any SDK dependency. Reads from `stdin`, writes to `stdout`, and handles `initialize`, `tools/list`, `tools/call`, and all required MCP lifecycle methods. Exposes 14 security tools to any MCP-compatible client.
 
 ### `core.py` — Orchestrator
 
-Central orchestrator that creates and manages scanner instances and routes scan requests through them. Reads the active safety profile to determine which scanners are enabled and at what sensitivity level. Provides the three primary scan surfaces: `scan_code()`, `scan_input()`, and `scan_output()`.
+Central orchestrator that creates and manages scanner instances and routes scan requests through them. Reads the active safety profile to determine which scanners are enabled and at what sensitivity level. Provides five scan surfaces: `scan_code()`, `scan_file()`, `scan_directory()`, `scan_input()`, and `scan_output()`. Accepts an optional `ProjectConfig` for per-project customization.
 
 ### `scanner.py` — Code Vulnerability Scanner
 
-Detects insecure code patterns using compiled regular expressions. Covers SQL injection, cross-site scripting (XSS), command injection, path traversal, insecure deserialization, hardcoded credentials, and insecure function usage. Patterns are compiled at module load time for performance.
+Detects insecure code patterns using compiled regular expressions. Delegates to the `patterns/` package for language-specific pattern sets (Python: 15 patterns, JS/TS: 7 patterns, plus 3 cross-language). Patterns are compiled at module load time for performance. Each pattern includes CWE IDs, confidence scores, and remediation suggestions.
 
 ### `secrets.py` — Secret & Credential Detector
 
@@ -77,6 +82,22 @@ Defines the `Finding` dataclass and its associated enums (`Severity`, `FindingTy
 ### `profiles.py` — Safety Profile System
 
 Loads and manages safety profiles from YAML configuration files. Ships with 5 built-in profiles (`general`, `education`, `healthcare`, `finance`, `children`) that configure scanner sensitivity, enabled/disabled scanners, and content moderation thresholds. Custom profiles can be defined by adding YAML files to the profiles directory.
+
+### `patterns/` — Language-Specific Pattern Sets
+
+A sub-package containing vulnerability detection patterns organized by language. The registry (`__init__.py`) provides `LANGUAGE_PATTERNS`, `EXTENSION_MAP` (maps file extensions to language keys), and `REMEDIATION_MAP` (maps pattern names to `Remediation` objects). Pattern modules: `common.py` (3 cross-language), `python.py` (15 Python-specific), `javascript.py` (7 JS/TS-specific). Each pattern is a 7-element tuple: `(name, regex, finding_type, severity, description, confidence, cwe_ids)`.
+
+### `config.py` — Project Configuration
+
+Discovers and loads `.guardianshield.json` or `.guardianshield.yaml` files from the project directory tree. Supports per-project settings including profile selection, severity overrides, exclude paths, and custom patterns. The `discover_config()` function walks up from the current directory to find the nearest config file.
+
+### `dedup.py` — Finding Deduplication
+
+Computes stable SHA-256 fingerprints for findings based on file path, line number, finding type, pattern name, and matched text. The `FindingDeduplicator` class tracks fingerprints across scans and returns a `DedupResult` with new, unchanged, and removed findings — enabling efficient delta reporting on re-scans.
+
+### `osv.py` — Dependency Vulnerability Scanner
+
+Local-first dependency vulnerability scanner using the OSV.dev API. Syncs vulnerability data to a local SQLite cache (`~/.guardianshield/osv_cache.db`), enabling offline lookups. Supports PyPI and npm ecosystems. Maps CVSS scores to GuardianShield severity levels and returns findings with `DEPENDENCY_VULNERABILITY` type.
 
 ---
 
@@ -146,7 +167,7 @@ The following walkthrough traces what happens when a client calls the `scan_code
 
 4. **Core checks active profile** — The orchestrator reads the active `SafetyProfile` to determine which scanners are enabled and their sensitivity levels.
 
-5. **Scanners execute** — The core calls `scanner.scan_code()` for vulnerability detection and `secrets.check_secrets()` for credential detection. Each scanner returns a list of `Finding` objects.
+5. **Scanners execute** — The core calls `scanner.scan_code()` for vulnerability detection and `secrets.check_secrets()` for credential detection. If a `file_path` or `language` is provided, the scanner loads the appropriate language-specific patterns from the `patterns/` package (auto-detected from extension via `EXTENSION_MAP`). Each scanner returns a list of `Finding` objects with LSP ranges, confidence scores, CWE IDs, and remediation suggestions.
 
 6. **Findings are combined and logged** — The core merges all findings, deduplicates if necessary, and writes an audit record to the SQLite database. The audit record contains the SHA-256 hash of the input — never the raw text.
 
@@ -161,16 +182,24 @@ GuardianShield/
 |-- src/
 |   '-- guardianshield/
 |       |-- __init__.py          # Package init, public API exports
-|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (hand-rolled)
+|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (14 tools)
 |       |-- core.py              # Orchestrator — routes scans through scanners
-|       |-- scanner.py           # Code vulnerability scanner (compiled regex)
+|       |-- scanner.py           # Code vulnerability scanner (uses patterns/)
+|       |-- patterns/            # Language-specific vulnerability patterns
+|       |   |-- __init__.py      # Registry: LANGUAGE_PATTERNS, EXTENSION_MAP, REMEDIATION_MAP
+|       |   |-- common.py        # 3 cross-language patterns + remediation
+|       |   |-- python.py        # 15 Python patterns + remediation
+|       |   '-- javascript.py    # 7 JS/TS patterns + remediation
 |       |-- secrets.py           # Secret/credential detector (12+ patterns)
 |       |-- injection.py         # Prompt injection detector (9+ heuristics)
 |       |-- pii.py               # PII detector (regex MVP + optional Presidio)
 |       |-- content.py           # Content moderator (category-based filtering)
 |       |-- audit.py             # SQLite audit logger (thread-safe)
-|       |-- findings.py          # Finding dataclass, Severity/FindingType enums
+|       |-- findings.py          # Finding, Range, Remediation, Severity, FindingType
 |       |-- profiles.py          # Safety profile loader and manager
+|       |-- config.py            # Project config discovery (.guardianshield.json/yaml)
+|       |-- dedup.py             # Finding deduplication (SHA-256 fingerprints)
+|       |-- osv.py               # OSV.dev dependency scanner (SQLite cache)
 |       '-- profiles/
 |           |-- general.yaml     # Balanced defaults for everyday development
 |           |-- education.yaml   # Content safety for learning environments
@@ -179,11 +208,16 @@ GuardianShield/
 |           '-- children.yaml    # Maximum content filtering and safety
 |-- tests/
 |   |-- test_audit.py
+|   |-- test_config.py           # Project config discovery tests
 |   |-- test_content.py
 |   |-- test_core.py
+|   |-- test_dedup.py            # Deduplication tests
+|   |-- test_file_scanning.py    # scan_file / scan_directory tests
 |   |-- test_findings.py
 |   |-- test_injection.py
 |   |-- test_mcp_server.py
+|   |-- test_osv.py              # OSV dependency scanner tests
+|   |-- test_patterns.py         # Language pattern tests
 |   |-- test_pii.py
 |   |-- test_profiles.py
 |   |-- test_scanner.py

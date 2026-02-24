@@ -24,9 +24,16 @@ from guardianshield import (
     Finding,
     FindingType,
     Severity,
+    Range,
+    Remediation,
     SafetyProfile,
     ScannerConfig,
 )
+
+# v0.2 additions
+from guardianshield.config import ProjectConfig, discover_config
+from guardianshield.dedup import FindingDeduplicator, DedupResult
+from guardianshield.osv import Dependency, OsvCache, check_dependencies
 ```
 
 ---
@@ -43,6 +50,7 @@ The main orchestrator that ties together all scanner modules, safety profiles, a
 GuardianShield(
     profile: str = "general",
     audit_path: str | None = None,
+    project_config: ProjectConfig | None = None,
 )
 ```
 
@@ -50,11 +58,17 @@ GuardianShield(
 |---|---|---|---|
 | `profile` | `str` | `"general"` | Name of the safety profile to activate. One of the built-in profiles (`general`, `education`, `healthcare`, `finance`, `children`) or a custom YAML profile name. |
 | `audit_path` | `str \| None` | `None` | Path to the SQLite audit database. `None` uses the default `~/.guardianshield/audit.db`. |
+| `project_config` | `ProjectConfig \| None` | `None` | Optional project configuration loaded from `.guardianshield.json` or `.guardianshield.yaml`. If the config specifies a `profile` and the `profile` argument is `"general"` (default), the config file's profile is used. |
 
 ```python
 shield = GuardianShield()                                  # defaults
 shield = GuardianShield(profile="healthcare")              # stricter profile
 shield = GuardianShield(audit_path="/tmp/audit.db")        # custom audit path
+
+# With project config
+from guardianshield.config import discover_config
+config = discover_config()
+shield = GuardianShield(project_config=config)
 ```
 
 ### Methods
@@ -130,6 +144,56 @@ check_secrets(
 | `file_path` | `str \| None` | `None` | Optional file path for context in findings. |
 
 **Returns:** `list[Finding]` -- detected secrets and credentials.
+
+---
+
+#### `scan_file`
+
+Scan a single source file for vulnerabilities and secrets. Reads the file, auto-detects language from extension if not provided, and delegates to `scan_code`.
+
+```python
+scan_file(
+    path: str,
+    language: str | None = None,
+) -> list[Finding]
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `path` | `str` | -- | Absolute or relative path to the file. |
+| `language` | `str \| None` | `None` | Optional language hint. Auto-detected from extension when omitted. |
+
+**Returns:** `list[Finding]` -- all detected vulnerabilities and secrets in the file.
+
+**Raises:** `FileNotFoundError` if the path does not exist. `IsADirectoryError` if the path is a directory.
+
+---
+
+#### `scan_directory`
+
+Recursively scan a directory for vulnerabilities and secrets across all supported file types.
+
+```python
+scan_directory(
+    path: str,
+    extensions: list[str] | None = None,
+    exclude: list[str] | None = None,
+    on_progress: Callable[[str, int, int], None] | None = None,
+    on_finding: Callable[[Finding], None] | None = None,
+) -> list[Finding]
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `path` | `str` | -- | Root directory to scan. |
+| `extensions` | `list[str] \| None` | `None` | File extensions to include (e.g. `[".py", ".js"]`). Defaults to all extensions in `EXTENSION_MAP`. |
+| `exclude` | `list[str] \| None` | `None` | Glob patterns for paths to skip (e.g. `["node_modules/*", ".git/*"]`). |
+| `on_progress` | `Callable \| None` | `None` | Optional callback `(file_path, files_done, total)` invoked before each file is scanned. |
+| `on_finding` | `Callable \| None` | `None` | Optional callback invoked for each individual `Finding`. |
+
+**Returns:** `list[Finding]` -- a flat list of all findings across all scanned files.
+
+**Raises:** `NotADirectoryError` if the path is not a directory.
 
 ---
 
@@ -232,6 +296,7 @@ close() -> None
 | Property | Type | Description |
 |---|---|---|
 | `profile` | `SafetyProfile` | The currently active safety profile (read-only). |
+| `project_config` | `ProjectConfig \| None` | The active project configuration, if any (read-only). |
 
 ---
 
@@ -253,6 +318,10 @@ class Finding:
     scanner: str = ""
     finding_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     metadata: dict[str, Any] = field(default_factory=dict)
+    range: Range | None = None
+    confidence: float | None = None
+    cwe_ids: list[str] = field(default_factory=list)
+    remediation: Remediation | None = None
 ```
 
 ### Fields
@@ -268,6 +337,10 @@ class Finding:
 | `scanner` | `str` | `""` | Name of the scanner that produced this finding. |
 | `finding_id` | `str` | *(auto-generated)* | Unique 12-character hex identifier. |
 | `metadata` | `dict[str, Any]` | `{}` | Additional scanner-specific data. |
+| `range` | `Range \| None` | `None` | Precise character range in LSP diagnostic format (0-based). |
+| `confidence` | `float \| None` | `None` | Detection confidence between 0.0 and 1.0. |
+| `cwe_ids` | `list[str]` | `[]` | List of CWE identifiers (e.g. `["CWE-89"]`). |
+| `remediation` | `Remediation \| None` | `None` | Machine-readable fix suggestion with before/after examples. |
 
 ### Methods
 
@@ -334,16 +407,17 @@ A `str` enum categorizing the kind of security finding.
 
 ```python
 class FindingType(str, Enum):
-    SECRET              = "secret"
-    SQL_INJECTION       = "sql_injection"
-    XSS                 = "xss"
-    COMMAND_INJECTION   = "command_injection"
-    PATH_TRAVERSAL      = "path_traversal"
-    INSECURE_FUNCTION   = "insecure_function"
-    INSECURE_PATTERN    = "insecure_pattern"
-    PROMPT_INJECTION    = "prompt_injection"
-    PII_LEAK            = "pii_leak"
-    CONTENT_VIOLATION   = "content_violation"
+    SECRET                   = "secret"
+    SQL_INJECTION            = "sql_injection"
+    XSS                      = "xss"
+    COMMAND_INJECTION        = "command_injection"
+    PATH_TRAVERSAL           = "path_traversal"
+    INSECURE_FUNCTION        = "insecure_function"
+    INSECURE_PATTERN         = "insecure_pattern"
+    PROMPT_INJECTION         = "prompt_injection"
+    PII_LEAK                 = "pii_leak"
+    CONTENT_VIOLATION        = "content_violation"
+    DEPENDENCY_VULNERABILITY = "dependency_vulnerability"
 ```
 
 | Member | Value | Description |
@@ -351,13 +425,14 @@ class FindingType(str, Enum):
 | `SECRET` | `"secret"` | Hardcoded secret, API key, token, or credential. |
 | `SQL_INJECTION` | `"sql_injection"` | SQL injection vulnerability via string formatting or concatenation. |
 | `XSS` | `"xss"` | Cross-site scripting vulnerability. |
-| `COMMAND_INJECTION` | `"command_injection"` | OS command injection via `os.system`, `subprocess`, or similar. |
+| `COMMAND_INJECTION` | `"command_injection"` | OS command injection via shell execution functions. |
 | `PATH_TRAVERSAL` | `"path_traversal"` | Directory traversal vulnerability. |
-| `INSECURE_FUNCTION` | `"insecure_function"` | Use of a known insecure function (e.g. `eval`, `exec`). |
+| `INSECURE_FUNCTION` | `"insecure_function"` | Use of a known insecure function. |
 | `INSECURE_PATTERN` | `"insecure_pattern"` | General insecure coding pattern. |
 | `PROMPT_INJECTION` | `"prompt_injection"` | Prompt injection or jailbreak attempt. |
 | `PII_LEAK` | `"pii_leak"` | Personally identifiable information detected in output. |
 | `CONTENT_VIOLATION` | `"content_violation"` | Content that violates the active moderation policy. |
+| `DEPENDENCY_VULNERABILITY` | `"dependency_vulnerability"` | Known CVE in a project dependency (detected via OSV.dev). |
 
 ---
 
@@ -462,6 +537,307 @@ ScannerConfig.from_dict(data: dict[str, Any]) -> ScannerConfig
 ```
 
 Deserialize from a plain dict.
+
+---
+
+## Range
+
+::: guardianshield.findings.Range
+
+An LSP-compatible character range for precise finding location. All values are 0-based to match the [LSP Diagnostic specification](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#range).
+
+```python
+@dataclass
+class Range:
+    start_line: int
+    start_col: int
+    end_line: int
+    end_col: int
+```
+
+### Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `start_line` | `int` | 0-based line number of the range start. |
+| `start_col` | `int` | 0-based column offset of the range start. |
+| `end_line` | `int` | 0-based line number of the range end. |
+| `end_col` | `int` | 0-based column offset of the range end. |
+
+### Methods
+
+#### `to_lsp`
+
+Serialize to LSP `Range` format (`{"start": {"line": ..., "character": ...}, "end": ...}`).
+
+```python
+to_lsp() -> dict[str, Any]
+```
+
+#### `from_lsp` *(classmethod)*
+
+Deserialize from LSP `Range` format.
+
+```python
+Range.from_lsp(data: dict[str, Any]) -> Range
+```
+
+---
+
+## Remediation
+
+::: guardianshield.findings.Remediation
+
+A machine-readable fix suggestion attached to a finding.
+
+```python
+@dataclass
+class Remediation:
+    description: str
+    before: str = ""
+    after: str = ""
+    auto_fixable: bool = False
+```
+
+### Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `description` | `str` | -- | Human-readable description of the fix. |
+| `before` | `str` | `""` | Example of the vulnerable code. |
+| `after` | `str` | `""` | Example of the fixed code. |
+| `auto_fixable` | `bool` | `False` | Whether the fix can be applied automatically. |
+
+### Methods
+
+#### `to_dict`
+
+```python
+to_dict() -> dict[str, Any]
+```
+
+Serialize to a plain dict. Empty strings are omitted.
+
+#### `from_dict` *(classmethod)*
+
+```python
+Remediation.from_dict(data: dict[str, Any]) -> Remediation
+```
+
+Deserialize from a plain dict.
+
+---
+
+## ProjectConfig
+
+::: guardianshield.config.ProjectConfig
+
+Per-project GuardianShield configuration loaded from `.guardianshield.json` or `.guardianshield.yaml`.
+
+```python
+@dataclass
+class ProjectConfig:
+    profile: str | None = None
+    severity_overrides: dict[str, str] = field(default_factory=dict)
+    exclude_paths: list[str] = field(default_factory=list)
+    custom_patterns: list[dict[str, Any]] = field(default_factory=list)
+    config_path: str | None = None
+```
+
+### Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `profile` | `str \| None` | `None` | Name of the safety profile to use. |
+| `severity_overrides` | `dict[str, str]` | `{}` | Map of `pattern_name` to severity override (e.g. `{"sql_concat": "critical"}`). |
+| `exclude_paths` | `list[str]` | `[]` | Glob patterns for paths to exclude from directory scanning. |
+| `custom_patterns` | `list[dict]` | `[]` | Custom pattern definitions. |
+| `config_path` | `str \| None` | `None` | Path to the config file that was loaded. |
+
+---
+
+## `discover_config`
+
+::: guardianshield.config.discover_config
+
+Walk up the directory tree from a starting directory looking for a `.guardianshield.json`, `.guardianshield.yaml`, or `.guardianshield.yml` file.
+
+```python
+discover_config(
+    start_dir: str | None = None,
+    max_depth: int = 10,
+) -> ProjectConfig | None
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `start_dir` | `str \| None` | `None` | Directory to start searching from. Defaults to the current working directory. |
+| `max_depth` | `int` | `10` | Maximum number of parent directories to traverse. |
+
+**Returns:** A `ProjectConfig` if a config file is found, otherwise `None`.
+
+---
+
+## FindingDeduplicator
+
+::: guardianshield.dedup.FindingDeduplicator
+
+Tracks finding fingerprints across scans. On each call to `deduplicate()`, returns a `DedupResult` with delta information (new, unchanged, removed).
+
+```python
+dedup = FindingDeduplicator()
+
+# First scan — everything is new.
+result1 = dedup.deduplicate(findings_1)
+
+# Second scan — only delta is reported.
+result2 = dedup.deduplicate(findings_2)
+```
+
+### Methods
+
+#### `deduplicate`
+
+```python
+deduplicate(findings: list[Finding]) -> DedupResult
+```
+
+Compare findings against the previous scan and return a delta. Updates the internal baseline.
+
+#### `reset`
+
+```python
+reset() -> None
+```
+
+Clear the fingerprint baseline.
+
+### Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `previous_fingerprints` | `set[str]` | The set of fingerprints from the last scan. |
+
+---
+
+## DedupResult
+
+::: guardianshield.dedup.DedupResult
+
+Result of deduplicating findings against a previous scan.
+
+```python
+@dataclass
+class DedupResult:
+    scan_id: str = field(default_factory=...)
+    new: list[Finding] = field(default_factory=list)
+    unchanged: list[Finding] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+    all_findings: list[Finding] = field(default_factory=list)
+```
+
+### Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `scan_id` | `str` | Unique 12-character hex identifier for this scan session. |
+| `new` | `list[Finding]` | Findings not present in the previous scan. |
+| `unchanged` | `list[Finding]` | Findings matching a previous fingerprint. |
+| `removed` | `list[str]` | Fingerprints from the previous scan that are no longer present. |
+| `all_findings` | `list[Finding]` | The complete list of current findings. |
+
+---
+
+## Dependency
+
+::: guardianshield.osv.Dependency
+
+A single package dependency to check for known vulnerabilities.
+
+```python
+@dataclass
+class Dependency:
+    name: str
+    version: str
+    ecosystem: str = "PyPI"
+```
+
+### Fields
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `name` | `str` | -- | Package name (e.g. `"requests"`, `"lodash"`). |
+| `version` | `str` | -- | Installed version string (e.g. `"2.28.0"`). |
+| `ecosystem` | `str` | `"PyPI"` | Package ecosystem: `"PyPI"` or `"npm"`. |
+
+---
+
+## OsvCache
+
+::: guardianshield.osv.OsvCache
+
+Local SQLite cache for OSV.dev vulnerability data. Enables offline dependency scanning after initial sync.
+
+```python
+cache = OsvCache()                            # default path
+cache = OsvCache(db_path="/tmp/osv_cache.db") # custom path
+```
+
+### Constructor
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `db_path` | `str \| None` | `None` | Path to the SQLite cache file. Default: `~/.guardianshield/osv_cache.db`. |
+
+### Methods
+
+#### `sync`
+
+Fetch vulnerability data from OSV.dev and update the local cache.
+
+```python
+sync(ecosystems: list[str] | None = None) -> dict[str, Any]
+```
+
+#### `lookup`
+
+Look up vulnerabilities for a specific package.
+
+```python
+lookup(name: str, version: str, ecosystem: str) -> list[dict]
+```
+
+#### `is_stale`
+
+Check if the cache is older than a given threshold.
+
+```python
+is_stale(max_age_hours: int = 24) -> bool
+```
+
+---
+
+## `check_dependencies`
+
+::: guardianshield.osv.check_dependencies
+
+Check a list of dependencies against the local OSV vulnerability cache.
+
+```python
+from guardianshield.osv import check_dependencies, Dependency
+
+deps = [
+    Dependency("requests", "2.28.0", "PyPI"),
+    Dependency("lodash", "4.17.20", "npm"),
+]
+findings = check_dependencies(deps)
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `dependencies` | `list[Dependency]` | List of dependencies to check. |
+
+**Returns:** `list[Finding]` -- findings with `FindingType.DEPENDENCY_VULNERABILITY` for any packages with known CVEs.
 
 ---
 

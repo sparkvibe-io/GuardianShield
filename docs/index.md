@@ -38,7 +38,7 @@ code scanning, PII detection, prompt injection defense, secret detection, and au
 
 <div class="stats-row">
   <div class="stat-card">
-    <span class="stat-number">9</span>
+    <span class="stat-number">14</span>
     <span class="stat-label">MCP Tools</span>
   </div>
   <div class="stat-card">
@@ -46,7 +46,7 @@ code scanning, PII detection, prompt injection defense, secret detection, and au
     <span class="stat-label">Safety Profiles</span>
   </div>
   <div class="stat-card">
-    <span class="stat-number">50+</span>
+    <span class="stat-number">75+</span>
     <span class="stat-label">Detection Patterns</span>
   </div>
   <div class="stat-card">
@@ -109,14 +109,22 @@ GuardianShield sits between your AI agent and your codebase, scanning every inte
     <h4><span class="material-symbols-rounded ms-green">visibility</span> PII Detection</h4>
     <p>Catches emails, SSNs, credit cards, phone numbers, and IP addresses — with automatic redaction.</p>
   </div>
+  <div class="shield-card">
+    <h4><span class="material-symbols-rounded ms-green">package_2</span> Dependency Scanning</h4>
+    <p>Check project dependencies for known CVEs using a local-first OSV.dev vulnerability cache.</p>
+  </div>
+  <div class="shield-card">
+    <h4><span class="material-symbols-rounded ms-green">code</span> Language-Aware</h4>
+    <p>75+ patterns across Python and JS/TS with CWE mapping — auto-detected from file extension.</p>
+  </div>
 </div>
 
 </div>
 
-<!-- 9 MCP Tools -->
+<!-- 14 MCP Tools -->
 <div class="gs-section" markdown>
 
-## :material-wrench: 9 MCP Tools
+## :material-wrench: 14 MCP Tools
 
 Every security capability is exposed as a standard MCP tool — callable from any compatible AI client.
 
@@ -156,6 +164,26 @@ Every security capability is exposed as a standard MCP tool — callable from an
   <div class="tool-card">
     <h3>shield_status</h3>
     <p>Check the health and configuration of your GuardianShield instance.</p>
+  </div>
+  <div class="tool-card">
+    <h3>scan_file</h3>
+    <p>Scan a single source file with auto language detection from extension.</p>
+  </div>
+  <div class="tool-card">
+    <h3>scan_directory</h3>
+    <p>Recursively scan a directory with extension filtering and progress streaming.</p>
+  </div>
+  <div class="tool-card">
+    <h3>test_pattern</h3>
+    <p>Test custom regex patterns against sample code — returns matches with positions.</p>
+  </div>
+  <div class="tool-card">
+    <h3>check_dependencies</h3>
+    <p>Check project dependencies for known CVEs via a local OSV.dev cache.</p>
+  </div>
+  <div class="tool-card">
+    <h3>sync_vulnerabilities</h3>
+    <p>Sync the local OSV vulnerability database for PyPI and npm ecosystems.</p>
   </div>
 </div>
 
@@ -306,6 +334,16 @@ Pre-configured security policies for different industries and use cases. Switch 
     <h3>Apache-2.0</h3>
     <p>Free forever. Patent-protected open source — security for humanity.</p>
   </div>
+  <div class="feature-card">
+    <span class="fc-icon"><span class="material-symbols-rounded ms-lg">link</span></span>
+    <h3>CWE Mapping</h3>
+    <p>Every finding links to CWE IDs — trace vulnerabilities to the industry-standard weakness catalog.</p>
+  </div>
+  <div class="feature-card">
+    <span class="fc-icon"><span class="material-symbols-rounded ms-lg">package_2</span></span>
+    <h3>Dependency Scanning</h3>
+    <p>Local-first OSV.dev integration — check PyPI and npm packages for known CVEs offline.</p>
+  </div>
 </div>
 
 </div>
@@ -326,7 +364,12 @@ Pre-configured security policies for different industries and use cases. Switch 
 | Safety Profiles | — | — | — | — | **:material-check-circle:{ .gs-check }** |
 | MCP Integration | — | — | — | — | **:material-check-circle:{ .gs-check }** |
 | Zero Dependencies | — | — | — | — | **:material-check-circle:{ .gs-check }** |
-| **GuardianShield** | **1 of 9** | **2 of 9** | **2 of 9** | **1 of 9** | **9 of 9** |
+| File-Level Scanning | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| Dependency Scanning | — | Partial | — | — | **:material-check-circle:{ .gs-check }** |
+| CWE Mapping | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| Finding Dedup | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| Response Redaction | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| **GuardianShield** | **1 of 14** | **2 of 14** | **2 of 14** | **1 of 14** | **14 of 14** |
 
 </div>
 
