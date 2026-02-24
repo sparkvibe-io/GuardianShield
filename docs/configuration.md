@@ -5,11 +5,84 @@ description: Configure GuardianShield safety profiles, scanners, and environment
 
 # Configuration
 
-GuardianShield is designed to work out of the box with sensible defaults, but every aspect of its behavior can be tailored to your needs. Configuration is supported through three interfaces:
+GuardianShield is designed to work out of the box with sensible defaults, but every aspect of its behavior can be tailored to your needs. Configuration is supported through four interfaces:
 
+- **Project config file** -- `.guardianshield.json` or `.guardianshield.yaml` in your project root
 - **Environment variables** -- ideal for MCP server deployments and CI/CD pipelines
 - **Python API** -- programmatic control when using GuardianShield as a library
 - **MCP tool calls** -- runtime profile switching from any connected AI client
+
+---
+
+## Project Configuration File
+
+Place a `.guardianshield.json` or `.guardianshield.yaml` file in your project root to customize GuardianShield behavior per-project. The `discover_config()` function walks up the directory tree from the current working directory to find the nearest config file.
+
+### Supported Fields
+
+| Field | Type | Description |
+|---|---|---|
+| `profile` | `string` | Safety profile to use (`general`, `education`, `healthcare`, `finance`, `children`). |
+| `severity_overrides` | `object` | Map of pattern name to severity override (e.g. `{"sql_concat": "critical"}`). |
+| `exclude_paths` | `string[]` | Glob patterns for paths to exclude from directory scanning. |
+| `custom_patterns` | `array` | Custom pattern definitions to add to the scanner. |
+
+### Example: JSON
+
+```json title=".guardianshield.json"
+{
+  "profile": "finance",
+  "severity_overrides": {
+    "hardcoded_password": "critical",
+    "sql_concat": "critical"
+  },
+  "exclude_paths": [
+    "tests/fixtures/*",
+    "vendor/*",
+    "*.min.js"
+  ],
+  "custom_patterns": []
+}
+```
+
+### Example: YAML
+
+```yaml title=".guardianshield.yaml"
+profile: healthcare
+severity_overrides:
+  hardcoded_password: critical
+exclude_paths:
+  - "tests/fixtures/*"
+  - "vendor/*"
+  - "*.min.js"
+```
+
+!!! info "JSON always works; YAML requires PyYAML"
+    The JSON format uses Python's built-in `json` module — no extra dependencies. To use YAML format, install PyYAML: `pip install pyyaml`.
+
+### Discovery Behavior
+
+The `discover_config()` function searches for config files in this priority order:
+
+1. `.guardianshield.json`
+2. `.guardianshield.yaml`
+3. `.guardianshield.yml`
+
+It starts in the current directory and walks up to 10 parent directories. The first file found is loaded.
+
+### Python API Usage
+
+```python
+from guardianshield import GuardianShield
+from guardianshield.config import discover_config
+
+# Auto-discover project config
+config = discover_config()
+shield = GuardianShield(project_config=config)
+
+# Scan a directory — exclude_paths from config are applied automatically
+findings = shield.scan_directory("src/")
+```
 
 ---
 
@@ -91,15 +164,15 @@ GuardianShield includes five independent scanners. Each can be enabled or disabl
 
 **Profile key:** `code_scanner`
 
-Analyzes source code for common vulnerability patterns:
+Analyzes source code for common vulnerability patterns using 75+ language-aware rules. The scanner auto-detects language from file extension and loads the appropriate pattern set: Python (15 patterns), JavaScript/TypeScript (7 patterns), plus 3 cross-language patterns. Every finding includes CWE IDs and remediation suggestions with before/after code examples.
 
 | Detection | Examples |
 |---|---|
 | SQL injection | String-concatenated queries, unsanitized `WHERE` clauses |
 | Cross-site scripting (XSS) | Unescaped template output, `innerHTML` assignments |
-| Command injection | `os.system()`, `subprocess.call()` with shell=True |
+| Command injection | Shell execution with unsanitized input |
 | Path traversal | `../` sequences, unsanitized file path construction |
-| Insecure functions | `eval()`, `exec()`, `pickle.loads()`, `yaml.load()` |
+| Insecure functions | Dangerous function calls (language-specific) |
 
 ### Secret Scanner
 
@@ -317,8 +390,9 @@ When multiple configuration sources are present, GuardianShield resolves setting
 
 1. **MCP tool calls** -- `set_profile` at runtime
 2. **Python API** -- constructor arguments and `set_profile()` method
-3. **Environment variables** -- `GUARDIANSHIELD_PROFILE`, `GUARDIANSHIELD_AUDIT_PATH`
-4. **Built-in defaults** -- `general` profile, `~/.guardianshield/audit.db`
+3. **Project config file** -- `.guardianshield.json` or `.guardianshield.yaml`
+4. **Environment variables** -- `GUARDIANSHIELD_PROFILE`, `GUARDIANSHIELD_AUDIT_PATH`
+5. **Built-in defaults** -- `general` profile, `~/.guardianshield/audit.db`
 
 !!! example "Practical example"
     If `GUARDIANSHIELD_PROFILE=general` is set in the environment but a client calls `set_profile("finance")` via MCP, the `finance` profile is used for all subsequent scans until the server restarts.
