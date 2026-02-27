@@ -313,3 +313,125 @@ def test_osv_cache_property_creates_lazily(tmp_path):
     # Subsequent access returns the same instance.
     assert s.osv_cache is cache
     s.close()
+
+
+# -- scan_dependencies_in_directory ------------------------------------------
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_scan_deps_in_dir_finds_manifests(mock_check, tmp_path):
+    """scan_dependencies_in_directory finds manifest files and parses them."""
+    mock_check.return_value = []
+    # Create a requirements.txt in the temp dir
+    (tmp_path / "requirements.txt").write_text("requests==2.28.0\nflask==2.3.0\n")
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    findings = s.scan_dependencies_in_directory(str(tmp_path))
+    assert findings == []
+    # check_dependencies should have been called with 2 deps
+    assert mock_check.call_count == 1
+    deps = mock_check.call_args[0][0]
+    names = {d.name for d in deps}
+    assert "requests" in names
+    assert "flask" in names
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_scan_deps_in_dir_skips_excluded(mock_check, tmp_path):
+    """Excluded patterns should prevent manifest scanning."""
+    mock_check.return_value = []
+    sub = tmp_path / "vendor"
+    sub.mkdir()
+    (sub / "requirements.txt").write_text("django==4.0.0\n")
+    (tmp_path / "requirements.txt").write_text("flask==2.3.0\n")
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    findings = s.scan_dependencies_in_directory(str(tmp_path), exclude=["vendor/*"])
+    assert findings == []
+    deps = mock_check.call_args[0][0]
+    names = {d.name for d in deps}
+    assert "flask" in names
+    assert "django" not in names
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_scan_deps_in_dir_deduplicates(mock_check, tmp_path):
+    """Same package in multiple manifests should be deduplicated."""
+    mock_check.return_value = []
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    (tmp_path / "requirements.txt").write_text("requests==2.28.0\n")
+    (sub / "requirements.txt").write_text("requests==2.30.0\n")
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    s.scan_dependencies_in_directory(str(tmp_path))
+    deps = mock_check.call_args[0][0]
+    req_deps = [d for d in deps if d.name == "requests"]
+    assert len(req_deps) == 1  # deduplicated
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_scan_deps_in_dir_logs_audit(mock_check, tmp_path):
+    """scan_dependencies_in_directory logs to audit with type 'directory_dependencies'."""
+    mock_check.return_value = [_make_finding("requests", "2.28.0")]
+    (tmp_path / "requirements.txt").write_text("requests==2.28.0\n")
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    s.scan_dependencies_in_directory(str(tmp_path))
+    log = s.get_audit_log(scan_type="directory_dependencies")
+    assert len(log) == 1
+    assert log[0]["scan_type"] == "directory_dependencies"
+    assert log[0]["finding_count"] == 1
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_scan_deps_in_dir_empty(mock_check, tmp_path):
+    """Empty directory returns no findings and no check_dependencies call."""
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    findings = s.scan_dependencies_in_directory(str(tmp_path))
+    assert findings == []
+    # check_dependencies is not called when there are no deps
+    mock_check.assert_not_called()
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_scan_deps_in_dir_on_finding_callback(mock_check, tmp_path):
+    """on_finding callback is invoked for each finding."""
+    finding = _make_finding("requests", "2.28.0")
+    mock_check.return_value = [finding]
+    (tmp_path / "requirements.txt").write_text("requests==2.28.0\n")
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    callback_findings = []
+    s.scan_dependencies_in_directory(
+        str(tmp_path),
+        on_finding=lambda f: callback_findings.append(f),
+    )
+    assert len(callback_findings) == 1
+    assert callback_findings[0] is finding
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_scan_deps_in_dir_package_json(mock_check, tmp_path):
+    """scan_dependencies_in_directory detects package.json."""
+    mock_check.return_value = []
+    pkg = {
+        "dependencies": {"express": "^4.18.0"},
+        "devDependencies": {"jest": "^29.0.0"},
+    }
+    import json
+    (tmp_path / "package.json").write_text(json.dumps(pkg))
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    s.scan_dependencies_in_directory(str(tmp_path))
+    deps = mock_check.call_args[0][0]
+    ecosystems = {d.ecosystem for d in deps}
+    assert "npm" in ecosystems
+    s.close()

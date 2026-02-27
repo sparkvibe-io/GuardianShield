@@ -348,7 +348,7 @@ TOOLS: list[dict[str, Any]] = [
                             "version": {"type": "string"},
                             "ecosystem": {
                                 "type": "string",
-                                "enum": ["PyPI", "npm"],
+                                "enum": ["PyPI", "npm", "Go", "Packagist"],
                                 "default": "PyPI",
                             },
                         },
@@ -372,8 +372,8 @@ TOOLS: list[dict[str, Any]] = [
             "properties": {
                 "ecosystem": {
                     "type": "string",
-                    "description": "Ecosystem to sync (PyPI or npm).",
-                    "enum": ["PyPI", "npm"],
+                    "description": "Ecosystem to sync (PyPI, npm, Go, or Packagist).",
+                    "enum": ["PyPI", "npm", "Go", "Packagist"],
                 },
                 "packages": {
                     "type": "array",
@@ -387,9 +387,11 @@ TOOLS: list[dict[str, Any]] = [
     {
         "name": "parse_manifest",
         "description": (
-            "Parse a dependency manifest file (requirements.txt, "
-            "package.json, or pyproject.toml) into a structured list "
-            "of dependencies. Auto-detects format from the filename."
+            "Parse a dependency manifest file into a structured list "
+            "of dependencies. Auto-detects format from the filename. "
+            "Supports: requirements.txt, package.json, pyproject.toml, "
+            "package-lock.json, yarn.lock, pnpm-lock.yaml, Pipfile.lock, "
+            "go.mod, go.sum, composer.json, composer.lock."
         ),
         "inputSchema": {
             "type": "object",
@@ -402,11 +404,36 @@ TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": (
                         "Filename for format detection "
-                        "(e.g. 'requirements.txt', 'package.json', 'pyproject.toml')."
+                        "(e.g. 'requirements.txt', 'package.json', 'package-lock.json', "
+                        "'yarn.lock', 'go.mod', 'composer.json')."
                     ),
                 },
             },
             "required": ["content", "filename"],
+        },
+    },
+    {
+        "name": "scan_dependencies",
+        "description": (
+            "Recursively scan a directory for manifest/lockfiles "
+            "(requirements.txt, package.json, go.mod, composer.json, etc.), "
+            "parse dependencies, and check them for known vulnerabilities "
+            "using the OSV.dev database."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Root directory to scan for manifest files.",
+                },
+                "exclude": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": 'Glob patterns to skip (e.g. ["vendor/*"]).',
+                },
+            },
+            "required": ["path"],
         },
     },
 ]
@@ -652,6 +679,7 @@ class GuardianShieldMCPServer:
             "check_dependencies": self._tool_check_dependencies,
             "sync_vulnerabilities": self._tool_sync_vulnerabilities,
             "parse_manifest": self._tool_parse_manifest,
+            "scan_dependencies": self._tool_scan_dependencies,
         }
 
         handler = tool_handlers.get(tool_name)
@@ -904,6 +932,7 @@ class GuardianShieldMCPServer:
             "scan_code", "scan_input", "scan_output", "check_secrets",
             "scan_file", "scan_directory", "test_pattern",
             "check_dependencies", "sync_vulnerabilities",
+            "scan_dependencies",
         ]
         return self._tool_success(json.dumps(status, indent=2))
 
@@ -1078,6 +1107,43 @@ class GuardianShieldMCPServer:
             ],
             "count": len(deps),
             "ecosystem": ecosystem,
+        }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_scan_dependencies(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        path = args.get("path")
+        if not path or not isinstance(path, str):
+            return self._tool_error("'path' is required.")
+
+        exclude = args.get("exclude")
+
+        try:
+            findings = self._shield.scan_dependencies_in_directory(
+                path, exclude=exclude,
+            )
+        except NotADirectoryError:
+            return self._tool_error(f"Not a directory: {path}")
+
+        # Retrieve the manifests_found info from audit log metadata.
+        log = self._shield.get_audit_log(scan_type="directory_dependencies", limit=1)
+        manifests_found: list[str] = []
+        dependency_count = 0
+        if log:
+            import json as _json
+            try:
+                meta = _json.loads(log[0].get("metadata", "{}"))
+                manifests_found = meta.get("manifests_found", [])
+                dependency_count = meta.get("dependency_count", 0)
+            except (ValueError, TypeError):
+                pass
+
+        result = {
+            "directory": path,
+            "manifests_found": manifests_found,
+            "dependency_count": dependency_count,
+            "finding_count": len(findings),
+            "findings": [f.to_dict() for f in self._maybe_redact(findings)],
         }
         return self._tool_success(json.dumps(result, indent=2))
 

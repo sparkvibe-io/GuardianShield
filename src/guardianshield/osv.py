@@ -242,8 +242,8 @@ DEFAULT_CACHE_PATH = os.path.join(
 # OSV.dev API endpoint
 OSV_API_URL = "https://api.osv.dev/v1"
 
-# Supported ecosystems (Tier 1)
-SUPPORTED_ECOSYSTEMS = ("PyPI", "npm")
+# Supported ecosystems (Tier 1 + Tier 2)
+SUPPORTED_ECOSYSTEMS = ("PyPI", "npm", "Go", "Packagist")
 
 # Maximum pages to fetch per package (safety limit for pagination)
 MAX_PAGES_PER_PACKAGE = 10
