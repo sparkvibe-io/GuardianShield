@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import signal
 import sys
 from typing import Any
 
@@ -57,7 +58,7 @@ MCP_PROTOCOL_VERSION = "2024-11-05"
 
 SERVER_INFO = {
     "name": "guardianshield",
-    "version": "0.2.0",
+    "version": "1.0.0",
 }
 
 # ---------------------------------------------------------------------------
@@ -1212,8 +1213,15 @@ class GuardianShieldMCPServer:
     @staticmethod
     def _write_message(message: dict[str, Any]) -> None:
         line = json.dumps(message, ensure_ascii=False)
-        sys.stdout.write(line + "\n")
-        sys.stdout.flush()
+        try:
+            sys.stdout.write(line + "\n")
+            sys.stdout.flush()
+        except BrokenPipeError:
+            logger.info("Client disconnected (broken pipe)")
+            raise SystemExit(0)
+        except OSError as exc:
+            logger.warning("Failed to write message: %s", exc)
+            raise
 
 
 # ---------------------------------------------------------------------------
@@ -1231,6 +1239,15 @@ def main() -> None:
 
     try:
         server = GuardianShieldMCPServer()
+
+        def _handle_sigterm(signum: int, frame: Any) -> None:
+            logger.info("Received SIGTERM, shutting down gracefully.")
+            if server._shield is not None:
+                server._shield.close()
+            sys.exit(0)
+
+        signal.signal(signal.SIGTERM, _handle_sigterm)
+
         server.run()
     except KeyboardInterrupt:
         logger.info("Server interrupted by user.")

@@ -197,6 +197,30 @@ scan_directory(
 
 ---
 
+#### `scan_dependencies_in_directory`
+
+Walk a directory tree, detect manifest files (requirements.txt, package.json, go.mod, composer.json, etc.), parse dependencies, and check them for known vulnerabilities.
+
+```python
+scan_dependencies_in_directory(
+    path: str,
+    exclude: list[str] | None = None,
+    on_finding: Callable[[Finding], None] | None = None,
+) -> list[Finding]
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `path` | `str` | -- | Root directory to walk. |
+| `exclude` | `list[str] \| None` | `None` | Glob patterns for paths to skip. |
+| `on_finding` | `Callable \| None` | `None` | Optional callback invoked for each `Finding`. |
+
+**Returns:** `list[Finding]` -- findings with `FindingType.DEPENDENCY_VULNERABILITY` for any packages with known CVEs.
+
+**Raises:** `NotADirectoryError` if the path is not a directory.
+
+---
+
 #### `set_profile`
 
 Switch to a different safety profile at runtime.
@@ -768,7 +792,7 @@ class Dependency:
 |---|---|---|---|
 | `name` | `str` | -- | Package name (e.g. `"requests"`, `"lodash"`). |
 | `version` | `str` | -- | Installed version string (e.g. `"2.28.0"`). |
-| `ecosystem` | `str` | `"PyPI"` | Package ecosystem: `"PyPI"` or `"npm"`. |
+| `ecosystem` | `str` | `"PyPI"` | Package ecosystem: `"PyPI"`, `"npm"`, `"Go"`, or `"Packagist"`. |
 
 ---
 
@@ -838,6 +862,67 @@ findings = check_dependencies(deps)
 | `dependencies` | `list[Dependency]` | List of dependencies to check. |
 
 **Returns:** `list[Finding]` -- findings with `FindingType.DEPENDENCY_VULNERABILITY` for any packages with known CVEs.
+
+---
+
+## `parse_manifest`
+
+::: guardianshield.manifest.parse_manifest
+
+Auto-detect manifest format from filename and parse dependencies.
+
+```python
+from guardianshield.manifest import parse_manifest
+
+deps = parse_manifest("requests==2.28.0\nflask>=2.0.0\n", "requirements.txt")
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `text` | `str` | Contents of the manifest file. |
+| `filename` | `str` | Filename for format detection (e.g. `"requirements.txt"`, `"package.json"`, `"go.mod"`). |
+
+**Returns:** `list[Dependency]` -- parsed dependencies with name, version, and ecosystem.
+
+**Raises:** `ValueError` if the filename is not recognized.
+
+**Supported filenames:**
+
+| Filename | Ecosystem | Parser |
+|---|---|---|
+| `requirements.txt` | PyPI | `parse_requirements_txt` |
+| `package.json` | npm | `parse_package_json` |
+| `pyproject.toml` | PyPI | `parse_pyproject_toml` |
+| `package-lock.json` | npm | `parse_package_lock_json` |
+| `yarn.lock` | npm | `parse_yarn_lock` |
+| `pnpm-lock.yaml` | npm | `parse_pnpm_lock_yaml` |
+| `Pipfile.lock` | PyPI | `parse_pipfile_lock` |
+| `go.mod` | Go | `parse_go_mod` |
+| `go.sum` | Go | `parse_go_sum` |
+| `composer.json` | Packagist | `parse_composer_json` |
+| `composer.lock` | Packagist | `parse_composer_lock` |
+
+### Individual Parsers
+
+Each parser can be called directly for fine-grained control:
+
+```python
+from guardianshield.manifest import (
+    parse_requirements_txt,
+    parse_package_json,
+    parse_pyproject_toml,
+    parse_package_lock_json,
+    parse_yarn_lock,
+    parse_pnpm_lock_yaml,
+    parse_pipfile_lock,
+    parse_go_mod,
+    parse_go_sum,
+    parse_composer_json,
+    parse_composer_lock,
+)
+```
+
+All parsers accept a single `text: str` parameter (the file contents) and return `list[Dependency]`.
 
 ---
 

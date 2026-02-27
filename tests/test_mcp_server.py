@@ -3,6 +3,7 @@
 import json
 import io
 import sys
+from unittest.mock import patch, PropertyMock
 
 import pytest
 
@@ -334,7 +335,7 @@ class TestShieldStatus:
         ]
         responses = _capture_output(server, msgs)
         content = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert content["version"] == "0.2.0"
+        assert content["version"] == "1.0.0"
         assert content["profile"] == "general"
         assert "scanners" in content
         assert "capabilities" in content
@@ -746,7 +747,7 @@ class TestShieldStatusV2:
         assert "scan_file" in content["capabilities"]
         assert "check_dependencies" in content["capabilities"]
 
-    def test_status_version_is_0_2(self, tmp_path):
+    def test_status_version_is_1_0(self, tmp_path):
         server = _make_server(tmp_path)
         msgs = [
             {
@@ -756,7 +757,7 @@ class TestShieldStatusV2:
         ]
         responses = _capture_output(server, msgs)
         content = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert content["version"] == "0.2.0"
+        assert content["version"] == "1.0.0"
 
 
 # ---------------------------------------------------------------------------
@@ -990,9 +991,9 @@ class TestSyncVulnerabilities:
 
 
 class TestExports:
-    def test_version_is_0_2(self):
+    def test_version_is_1_0(self):
         import guardianshield
-        assert guardianshield.__version__ == "0.2.0"
+        assert guardianshield.__version__ == "1.0.0"
 
     def test_v2_types_exported(self):
         from guardianshield import (
@@ -1102,3 +1103,119 @@ class TestScanDependencies:
         responses = _capture_output(server, msgs)
         content = json.loads(responses[0]["result"]["content"][0]["text"])
         assert "scan_dependencies" in content["capabilities"]
+
+
+# ---------------------------------------------------------------------------
+# Phase — parse_manifest tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseManifest:
+    def test_parse_manifest_requirements_txt(self, tmp_path):
+        """parse_manifest parses requirements.txt and returns 2 dependencies."""
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "parse_manifest",
+                    "arguments": {
+                        "content": "requests==2.28.0\nflask==2.3.0\n",
+                        "filename": "requirements.txt",
+                    },
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["count"] == 2
+        names = {d["name"] for d in content["dependencies"]}
+        assert "requests" in names
+        assert "flask" in names
+
+    def test_parse_manifest_missing_content(self, tmp_path):
+        """parse_manifest errors when content arg is omitted."""
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "parse_manifest",
+                    "arguments": {"filename": "requirements.txt"},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+    def test_parse_manifest_missing_filename(self, tmp_path):
+        """parse_manifest errors when filename arg is omitted."""
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "parse_manifest",
+                    "arguments": {"content": "requests==2.28.0\n"},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+    def test_parse_manifest_unknown_format(self, tmp_path):
+        """parse_manifest errors for an unrecognized filename."""
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "parse_manifest",
+                    "arguments": {
+                        "content": "some content",
+                        "filename": "unknown.xyz",
+                    },
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+
+# ---------------------------------------------------------------------------
+# Connection management tests
+# ---------------------------------------------------------------------------
+
+
+class TestDoubleInitialize:
+    def test_double_initialize_succeeds(self, tmp_path):
+        """Sending two initialize requests should both succeed without error."""
+        import os
+        os.environ["GUARDIANSHIELD_AUDIT_PATH"] = str(tmp_path / "audit.db")
+        try:
+            server = GuardianShieldMCPServer()
+            msgs = [
+                {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {}},
+                {"jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {}},
+            ]
+            responses = _capture_output(server, msgs)
+            assert len(responses) == 2
+            # Both should have successful results (no "error" key)
+            assert "error" not in responses[0]
+            assert "error" not in responses[1]
+            assert responses[0]["result"]["protocolVersion"] == MCP_PROTOCOL_VERSION
+            assert responses[1]["result"]["protocolVersion"] == MCP_PROTOCOL_VERSION
+        finally:
+            os.environ.pop("GUARDIANSHIELD_AUDIT_PATH", None)
+
+
+class TestBrokenPipeError:
+    def test_write_message_handles_broken_pipe(self, tmp_path):
+        """_write_message raises SystemExit(0) on BrokenPipeError."""
+        server = _make_server(tmp_path)
+        message = {"jsonrpc": "2.0", "id": 1, "result": {}}
+        with patch.object(sys, "stdout") as mock_stdout:
+            mock_stdout.write.side_effect = BrokenPipeError("broken pipe")
+            with pytest.raises(SystemExit) as exc_info:
+                server._write_message(message)
+            assert exc_info.value.code == 0

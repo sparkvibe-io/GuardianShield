@@ -5,7 +5,7 @@ description: Set up GuardianShield MCP server with Claude Code, VS Code, Cursor,
 
 # MCP Server Setup
 
-GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **14 tools**, **3 resources**, and **2 prompts** that any MCP-compatible AI client can discover and invoke automatically.
+GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **16 tools**, **3 resources**, and **2 prompts** that any MCP-compatible AI client can discover and invoke automatically.
 
 !!! info "What is MCP?"
     The [Model Context Protocol](https://modelcontextprotocol.io/) is an open standard that lets AI assistants discover and call external tools over a simple JSON-RPC transport. GuardianShield uses the **stdio** transport — the AI editor launches the server process and communicates through stdin/stdout.
@@ -72,7 +72,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Reload the window after saving. The Copilot agent will discover all 14 tools automatically.
+    Reload the window after saving. The Copilot agent will discover all 16 tools automatically.
 
 === "Cursor"
 
@@ -123,7 +123,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Restart Claude Desktop. The 14 tools, 3 resources, and 2 prompts will be available in the conversation.
+    Restart Claude Desktop. The 16 tools, 3 resources, and 2 prompts will be available in the conversation.
 
 === "Generic MCP Client"
 
@@ -140,7 +140,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
 
 ## Tools Reference
 
-GuardianShield exposes 14 MCP tools. Each tool accepts a JSON object of parameters and returns a structured result.
+GuardianShield exposes 16 MCP tools. Each tool accepts a JSON object of parameters and returns a structured result.
 
 ### `scan_code`
 
@@ -384,7 +384,7 @@ Test a custom regex pattern against sample code. Useful for developing and debug
 
 ### `check_dependencies`
 
-Check project dependencies for known CVEs using a local OSV.dev vulnerability cache. Supports PyPI and npm ecosystems.
+Check project dependencies for known CVEs using a local OSV.dev vulnerability cache. Supports PyPI, npm, Go, and Packagist ecosystems.
 
 | Parameter      | Type     | Required | Description                                                |
 |----------------|----------|----------|------------------------------------------------------------|
@@ -396,7 +396,7 @@ Each dependency object:
 |-------------|----------|----------|------------------------------------------------|
 | `name`      | `string` | Yes      | Package name (e.g. `"requests"`, `"lodash"`)   |
 | `version`   | `string` | Yes      | Package version (e.g. `"2.28.0"`)              |
-| `ecosystem` | `string` | Yes      | Package ecosystem: `"PyPI"` or `"npm"`         |
+| `ecosystem` | `string` | Yes      | Package ecosystem: `"PyPI"`, `"npm"`, `"Go"`, or `"Packagist"` |
 
 !!! example "Example call"
     ```json
@@ -419,21 +419,84 @@ Each dependency object:
 
 Sync the local OSV vulnerability database from OSV.dev. The local cache enables offline dependency scanning.
 
-| Parameter    | Type       | Required | Description                                                    |
-|--------------|------------|----------|----------------------------------------------------------------|
-| `ecosystems` | `string[]` | No       | Ecosystems to sync. Default: `["PyPI", "npm"]`.               |
+| Parameter  | Type       | Required | Description                                                    |
+|------------|------------|----------|----------------------------------------------------------------|
+| `ecosystem`| `string`   | Yes      | Ecosystem to sync: `"PyPI"`, `"npm"`, `"Go"`, or `"Packagist"`. |
+| `packages` | `string[]` | No       | Optional list of package names to sync.                        |
 
 !!! example "Example call"
     ```json
     {
       "name": "sync_vulnerabilities",
       "arguments": {
-        "ecosystems": ["PyPI", "npm"]
+        "ecosystem": "PyPI"
       }
     }
     ```
 
 **Returns:** Sync status including number of vulnerabilities cached per ecosystem and last sync timestamp.
+
+---
+
+### `parse_manifest`
+
+Parse a dependency manifest file into a structured list of dependencies. Auto-detects the format from the filename.
+
+| Parameter  | Type     | Required | Description                                                    |
+|------------|----------|----------|----------------------------------------------------------------|
+| `content`  | `string` | Yes      | The contents of the manifest file                              |
+| `filename` | `string` | Yes      | Filename for format detection (e.g. `"requirements.txt"`, `"package.json"`, `"go.mod"`) |
+
+Supported manifest formats:
+
+- `requirements.txt` (and variants like `requirements-dev.txt`)
+- `package.json`
+- `pyproject.toml`
+- `package-lock.json`
+- `yarn.lock`
+- `pnpm-lock.yaml`
+- `Pipfile.lock`
+- `go.mod`
+- `go.sum`
+- `composer.json`
+- `composer.lock`
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "parse_manifest",
+      "arguments": {
+        "content": "requests==2.28.0\nflask>=2.0.0\n",
+        "filename": "requirements.txt"
+      }
+    }
+    ```
+
+**Returns:** List of parsed dependencies with name, version, and ecosystem, plus a count and detected ecosystem.
+
+---
+
+### `scan_dependencies`
+
+Recursively scan a directory for manifest and lockfiles, parse dependencies, and check them for known vulnerabilities using the OSV.dev database.
+
+| Parameter | Type       | Required | Description                                              |
+|-----------|------------|----------|----------------------------------------------------------|
+| `path`    | `string`   | Yes      | Root directory to scan for manifest files                |
+| `exclude` | `string[]` | No       | Glob patterns to skip (e.g. `["vendor/*"]`)              |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "scan_dependencies",
+      "arguments": {
+        "path": ".",
+        "exclude": ["vendor/*", "node_modules/*"]
+      }
+    }
+    ```
+
+**Returns:** List of vulnerability findings across all discovered manifest files, with a summary of manifests found, total dependencies parsed, and findings by severity.
 
 ---
 
