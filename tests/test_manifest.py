@@ -1,14 +1,22 @@
-"""Tests for manifest file parser (requirements.txt, package.json, pyproject.toml)."""
+"""Tests for manifest file parser (all supported formats)."""
 
 import json
 
 import pytest
 
 from guardianshield.manifest import (
+    parse_composer_json,
+    parse_composer_lock,
+    parse_go_mod,
+    parse_go_sum,
     parse_manifest,
     parse_package_json,
+    parse_package_lock_json,
+    parse_pipfile_lock,
+    parse_pnpm_lock_yaml,
     parse_pyproject_toml,
     parse_requirements_txt,
+    parse_yarn_lock,
 )
 from guardianshield.osv import Dependency
 
@@ -600,3 +608,976 @@ dependencies = ["flask==2.3.0"]
         assert isinstance(parse_requirements_txt(""), list)
         assert isinstance(parse_package_json("{}"), list)
         assert isinstance(parse_pyproject_toml(""), list)
+
+
+# =======================================================================
+# package-lock.json
+# =======================================================================
+
+
+class TestParsePackageLockJson:
+    """Tests for package-lock.json parsing."""
+
+    def test_v2_packages_format(self):
+        data = {
+            "lockfileVersion": 2,
+            "packages": {
+                "": {"name": "myapp", "version": "1.0.0"},
+                "node_modules/lodash": {"version": "4.17.21"},
+                "node_modules/express": {"version": "4.18.2"},
+            },
+        }
+        deps = parse_package_lock_json(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"lodash", "express"}
+        assert all(d.ecosystem == "npm" for d in deps)
+
+    def test_v3_packages_format(self):
+        data = {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "myapp", "version": "1.0.0"},
+                "node_modules/axios": {"version": "1.4.0"},
+            },
+        }
+        deps = parse_package_lock_json(json.dumps(data))
+        assert len(deps) == 1
+        assert deps[0].name == "axios"
+        assert deps[0].version == "1.4.0"
+
+    def test_v1_dependencies_format(self):
+        data = {
+            "lockfileVersion": 1,
+            "dependencies": {
+                "lodash": {"version": "4.17.21"},
+                "express": {"version": "4.18.2"},
+            },
+        }
+        deps = parse_package_lock_json(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"lodash", "express"}
+
+    def test_v1_nested_dependencies(self):
+        data = {
+            "lockfileVersion": 1,
+            "dependencies": {
+                "express": {
+                    "version": "4.18.2",
+                    "dependencies": {
+                        "accepts": {"version": "1.3.8"},
+                    },
+                },
+            },
+        }
+        deps = parse_package_lock_json(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"express", "accepts"}
+
+    def test_scoped_packages(self):
+        data = {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "myapp"},
+                "node_modules/@types/node": {"version": "18.16.0"},
+                "node_modules/@babel/core": {"version": "7.22.0"},
+            },
+        }
+        deps = parse_package_lock_json(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"@types/node", "@babel/core"}
+
+    def test_nested_node_modules(self):
+        data = {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "myapp"},
+                "node_modules/a": {"version": "1.0.0"},
+                "node_modules/a/node_modules/b": {"version": "2.0.0"},
+            },
+        }
+        deps = parse_package_lock_json(json.dumps(data))
+        assert len(deps) == 2
+        versions = {d.name: d.version for d in deps}
+        assert versions["a"] == "1.0.0"
+        assert versions["b"] == "2.0.0"
+
+    def test_empty_packages(self):
+        data = {"lockfileVersion": 3, "packages": {}}
+        deps = parse_package_lock_json(json.dumps(data))
+        assert deps == []
+
+    def test_root_only(self):
+        data = {"lockfileVersion": 3, "packages": {"": {"name": "myapp", "version": "1.0.0"}}}
+        deps = parse_package_lock_json(json.dumps(data))
+        assert deps == []
+
+    def test_invalid_json(self):
+        deps = parse_package_lock_json("not json")
+        assert deps == []
+
+    def test_empty_file(self):
+        deps = parse_package_lock_json("{}")
+        assert deps == []
+
+    def test_non_dict_top_level(self):
+        deps = parse_package_lock_json(json.dumps([1, 2, 3]))
+        assert deps == []
+
+    def test_missing_version_skipped(self):
+        data = {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {"name": "myapp"},
+                "node_modules/lodash": {"version": "4.17.21"},
+                "node_modules/broken": {},
+            },
+        }
+        deps = parse_package_lock_json(json.dumps(data))
+        assert len(deps) == 1
+        assert deps[0].name == "lodash"
+
+    def test_returns_dependency_instances(self):
+        data = {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {},
+                "node_modules/lodash": {"version": "4.17.21"},
+            },
+        }
+        deps = parse_package_lock_json(json.dumps(data))
+        assert isinstance(deps[0], Dependency)
+
+
+# =======================================================================
+# yarn.lock
+# =======================================================================
+
+
+class TestParseYarnLock:
+    """Tests for yarn.lock (v1) parsing."""
+
+    def test_simple_package(self):
+        text = """\
+# yarn lockfile v1
+
+lodash@^4.17.21:
+  version "4.17.21"
+  resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz"
+  integrity sha512-abc123
+"""
+        deps = parse_yarn_lock(text)
+        assert len(deps) == 1
+        assert deps[0].name == "lodash"
+        assert deps[0].version == "4.17.21"
+        assert deps[0].ecosystem == "npm"
+
+    def test_multiple_packages(self):
+        text = """\
+lodash@^4.17.21:
+  version "4.17.21"
+
+express@^4.18.0:
+  version "4.18.2"
+"""
+        deps = parse_yarn_lock(text)
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"lodash", "express"}
+
+    def test_scoped_package(self):
+        text = """\
+"@types/node@^18.0.0":
+  version "18.16.0"
+"""
+        deps = parse_yarn_lock(text)
+        assert len(deps) == 1
+        assert deps[0].name == "@types/node"
+        assert deps[0].version == "18.16.0"
+
+    def test_multiple_version_ranges(self):
+        text = """\
+"lodash@^4.17.0, lodash@^4.17.21":
+  version "4.17.21"
+"""
+        deps = parse_yarn_lock(text)
+        assert len(deps) == 1
+        assert deps[0].name == "lodash"
+        assert deps[0].version == "4.17.21"
+
+    def test_deduplication(self):
+        # Same package with same resolved version should only appear once
+        text = """\
+lodash@^4.17.0:
+  version "4.17.21"
+
+lodash@^4.17.21:
+  version "4.17.21"
+"""
+        deps = parse_yarn_lock(text)
+        assert len(deps) == 1
+        assert deps[0].name == "lodash"
+
+    def test_empty_file(self):
+        deps = parse_yarn_lock("")
+        assert deps == []
+
+    def test_comments_only(self):
+        text = "# yarn lockfile v1\n\n"
+        deps = parse_yarn_lock(text)
+        assert deps == []
+
+    def test_returns_dependency_instances(self):
+        text = """\
+lodash@^4.17.21:
+  version "4.17.21"
+"""
+        deps = parse_yarn_lock(text)
+        assert isinstance(deps[0], Dependency)
+
+
+# =======================================================================
+# pnpm-lock.yaml
+# =======================================================================
+
+
+class TestParsePnpmLockYaml:
+    """Tests for pnpm-lock.yaml parsing."""
+
+    def test_slash_prefix_format(self):
+        text = """\
+lockfileVersion: '6.0'
+
+packages:
+
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-abc}
+    dev: false
+
+  /express@4.18.2:
+    resolution: {integrity: sha512-def}
+    dev: false
+"""
+        deps = parse_pnpm_lock_yaml(text)
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"lodash", "express"}
+        assert all(d.ecosystem == "npm" for d in deps)
+
+    def test_no_slash_prefix_format(self):
+        text = """\
+lockfileVersion: '9.0'
+
+packages:
+
+  lodash@4.17.21:
+    resolution: {integrity: sha512-abc}
+
+  express@4.18.2:
+    resolution: {integrity: sha512-def}
+"""
+        deps = parse_pnpm_lock_yaml(text)
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"lodash", "express"}
+
+    def test_scoped_package(self):
+        text = """\
+packages:
+
+  /@types/node@18.16.0:
+    resolution: {integrity: sha512-abc}
+"""
+        deps = parse_pnpm_lock_yaml(text)
+        assert len(deps) == 1
+        assert deps[0].name == "@types/node"
+        assert deps[0].version == "18.16.0"
+
+    def test_scoped_no_slash(self):
+        text = """\
+packages:
+
+  @babel/core@7.22.0:
+    resolution: {integrity: sha512-abc}
+"""
+        deps = parse_pnpm_lock_yaml(text)
+        assert len(deps) == 1
+        assert deps[0].name == "@babel/core"
+        assert deps[0].version == "7.22.0"
+
+    def test_deduplication(self):
+        text = """\
+packages:
+
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-abc}
+
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-abc}
+"""
+        deps = parse_pnpm_lock_yaml(text)
+        assert len(deps) == 1
+
+    def test_empty_packages(self):
+        text = """\
+lockfileVersion: '6.0'
+
+packages:
+"""
+        deps = parse_pnpm_lock_yaml(text)
+        assert deps == []
+
+    def test_empty_file(self):
+        deps = parse_pnpm_lock_yaml("")
+        assert deps == []
+
+    def test_only_header(self):
+        text = "lockfileVersion: '6.0'\n"
+        deps = parse_pnpm_lock_yaml(text)
+        assert deps == []
+
+    def test_returns_dependency_instances(self):
+        text = """\
+packages:
+
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-abc}
+"""
+        deps = parse_pnpm_lock_yaml(text)
+        assert isinstance(deps[0], Dependency)
+
+    def test_stops_at_next_section(self):
+        text = """\
+packages:
+
+  /lodash@4.17.21:
+    resolution: {integrity: sha512-abc}
+
+settings:
+  autoInstallPeers: true
+"""
+        deps = parse_pnpm_lock_yaml(text)
+        assert len(deps) == 1
+        assert deps[0].name == "lodash"
+
+
+# =======================================================================
+# Pipfile.lock
+# =======================================================================
+
+
+class TestParsePipfileLock:
+    """Tests for Pipfile.lock parsing."""
+
+    def test_default_section(self):
+        data = {
+            "_meta": {"hash": {"sha256": "abc"}},
+            "default": {
+                "requests": {"version": "==2.28.0"},
+                "flask": {"version": "==2.3.0"},
+            },
+            "develop": {},
+        }
+        deps = parse_pipfile_lock(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"requests", "flask"}
+        assert all(d.ecosystem == "PyPI" for d in deps)
+
+    def test_develop_section(self):
+        data = {
+            "_meta": {},
+            "default": {},
+            "develop": {
+                "pytest": {"version": "==7.4.0"},
+                "ruff": {"version": "==0.1.0"},
+            },
+        }
+        deps = parse_pipfile_lock(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"pytest", "ruff"}
+
+    def test_both_sections(self):
+        data = {
+            "_meta": {},
+            "default": {"flask": {"version": "==2.3.0"}},
+            "develop": {"pytest": {"version": "==7.4.0"}},
+        }
+        deps = parse_pipfile_lock(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"flask", "pytest"}
+
+    def test_version_prefix_stripped(self):
+        data = {
+            "_meta": {},
+            "default": {"requests": {"version": "==2.28.0"}},
+            "develop": {},
+        }
+        deps = parse_pipfile_lock(json.dumps(data))
+        assert deps[0].version == "2.28.0"
+
+    def test_missing_version_skipped(self):
+        data = {
+            "_meta": {},
+            "default": {
+                "requests": {"hashes": ["sha256:abc"]},
+                "flask": {"version": "==2.3.0"},
+            },
+            "develop": {},
+        }
+        deps = parse_pipfile_lock(json.dumps(data))
+        assert len(deps) == 1
+        assert deps[0].name == "flask"
+
+    def test_empty_sections(self):
+        data = {"_meta": {}, "default": {}, "develop": {}}
+        deps = parse_pipfile_lock(json.dumps(data))
+        assert deps == []
+
+    def test_invalid_json(self):
+        deps = parse_pipfile_lock("not json")
+        assert deps == []
+
+    def test_empty_file(self):
+        deps = parse_pipfile_lock("{}")
+        assert deps == []
+
+    def test_non_dict_top_level(self):
+        deps = parse_pipfile_lock(json.dumps([1, 2, 3]))
+        assert deps == []
+
+    def test_returns_dependency_instances(self):
+        data = {
+            "_meta": {},
+            "default": {"requests": {"version": "==2.28.0"}},
+            "develop": {},
+        }
+        deps = parse_pipfile_lock(json.dumps(data))
+        assert isinstance(deps[0], Dependency)
+
+
+# =======================================================================
+# go.mod
+# =======================================================================
+
+
+class TestParseGoMod:
+    """Tests for go.mod parsing."""
+
+    def test_require_block(self):
+        text = """\
+module github.com/myorg/myapp
+
+go 1.21
+
+require (
+\tgithub.com/gin-gonic/gin v1.9.1
+\tgithub.com/go-sql-driver/mysql v1.7.1
+)
+"""
+        deps = parse_go_mod(text)
+        assert len(deps) == 2
+        assert deps[0].name == "github.com/gin-gonic/gin"
+        assert deps[0].version == "v1.9.1"
+        assert deps[0].ecosystem == "Go"
+        assert deps[1].name == "github.com/go-sql-driver/mysql"
+        assert deps[1].version == "v1.7.1"
+
+    def test_single_require(self):
+        text = """\
+module github.com/myorg/myapp
+
+go 1.21
+
+require github.com/gin-gonic/gin v1.9.1
+"""
+        deps = parse_go_mod(text)
+        assert len(deps) == 1
+        assert deps[0].name == "github.com/gin-gonic/gin"
+        assert deps[0].version == "v1.9.1"
+
+    def test_multiple_require_blocks(self):
+        text = """\
+module github.com/myorg/myapp
+
+go 1.21
+
+require (
+\tgithub.com/gin-gonic/gin v1.9.1
+)
+
+require (
+\tgithub.com/go-sql-driver/mysql v1.7.1
+)
+"""
+        deps = parse_go_mod(text)
+        assert len(deps) == 2
+
+    def test_indirect_dependencies(self):
+        text = """\
+module github.com/myorg/myapp
+
+require (
+\tgithub.com/gin-gonic/gin v1.9.1
+\tgithub.com/bytedance/sonic v1.9.1 // indirect
+)
+"""
+        deps = parse_go_mod(text)
+        assert len(deps) == 2
+        # Both direct and indirect should be parsed
+
+    def test_replace_directives_skipped(self):
+        text = """\
+module github.com/myorg/myapp
+
+require (
+\tgithub.com/gin-gonic/gin v1.9.1
+)
+
+replace (
+\tgithub.com/gin-gonic/gin => ../gin
+)
+"""
+        deps = parse_go_mod(text)
+        assert len(deps) == 1
+        assert deps[0].name == "github.com/gin-gonic/gin"
+
+    def test_exclude_directives_skipped(self):
+        text = """\
+module github.com/myorg/myapp
+
+require (
+\tgithub.com/gin-gonic/gin v1.9.1
+)
+
+exclude (
+\tgithub.com/gin-gonic/gin v1.9.0
+)
+"""
+        deps = parse_go_mod(text)
+        assert len(deps) == 1
+
+    def test_empty_file(self):
+        text = "module github.com/myorg/myapp\n\ngo 1.21\n"
+        deps = parse_go_mod(text)
+        assert deps == []
+
+    def test_empty_string(self):
+        deps = parse_go_mod("")
+        assert deps == []
+
+    def test_comments_skipped(self):
+        text = """\
+module github.com/myorg/myapp
+
+// This is a comment
+require (
+\t// another comment
+\tgithub.com/gin-gonic/gin v1.9.1
+)
+"""
+        deps = parse_go_mod(text)
+        assert len(deps) == 1
+
+    def test_returns_dependency_instances(self):
+        text = """\
+module github.com/myorg/myapp
+
+require github.com/gin-gonic/gin v1.9.1
+"""
+        deps = parse_go_mod(text)
+        assert isinstance(deps[0], Dependency)
+
+
+# =======================================================================
+# go.sum
+# =======================================================================
+
+
+class TestParseGoSum:
+    """Tests for go.sum parsing."""
+
+    def test_simple_entries(self):
+        text = """\
+github.com/gin-gonic/gin v1.9.1 h1:abc=
+github.com/gin-gonic/gin v1.9.1/go.mod h1:def=
+github.com/go-sql-driver/mysql v1.7.1 h1:ghi=
+github.com/go-sql-driver/mysql v1.7.1/go.mod h1:jkl=
+"""
+        deps = parse_go_sum(text)
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"github.com/gin-gonic/gin", "github.com/go-sql-driver/mysql"}
+
+    def test_deduplication_of_go_mod_entries(self):
+        text = """\
+github.com/gin-gonic/gin v1.9.1 h1:abc=
+github.com/gin-gonic/gin v1.9.1/go.mod h1:def=
+"""
+        deps = parse_go_sum(text)
+        assert len(deps) == 1
+        assert deps[0].name == "github.com/gin-gonic/gin"
+        assert deps[0].version == "v1.9.1"
+        assert deps[0].ecosystem == "Go"
+
+    def test_multiple_versions(self):
+        text = """\
+github.com/gin-gonic/gin v1.9.0 h1:abc=
+github.com/gin-gonic/gin v1.9.0/go.mod h1:def=
+github.com/gin-gonic/gin v1.9.1 h1:ghi=
+github.com/gin-gonic/gin v1.9.1/go.mod h1:jkl=
+"""
+        deps = parse_go_sum(text)
+        assert len(deps) == 2
+        versions = {d.version for d in deps}
+        assert versions == {"v1.9.0", "v1.9.1"}
+
+    def test_go_mod_only_entry(self):
+        # Some entries only have /go.mod line without the base entry
+        text = """\
+github.com/stretchr/testify v1.8.4/go.mod h1:abc=
+"""
+        deps = parse_go_sum(text)
+        assert len(deps) == 1
+        assert deps[0].name == "github.com/stretchr/testify"
+        assert deps[0].version == "v1.8.4"
+
+    def test_empty_file(self):
+        deps = parse_go_sum("")
+        assert deps == []
+
+    def test_blank_lines_handled(self):
+        text = """\
+
+github.com/gin-gonic/gin v1.9.1 h1:abc=
+
+github.com/go-sql-driver/mysql v1.7.1 h1:ghi=
+
+"""
+        deps = parse_go_sum(text)
+        assert len(deps) == 2
+
+    def test_returns_dependency_instances(self):
+        text = "github.com/gin-gonic/gin v1.9.1 h1:abc=\n"
+        deps = parse_go_sum(text)
+        assert isinstance(deps[0], Dependency)
+
+
+# =======================================================================
+# composer.json
+# =======================================================================
+
+
+class TestParseComposerJson:
+    """Tests for PHP composer.json parsing."""
+
+    def test_require_section(self):
+        data = {
+            "require": {
+                "php": "^8.1",
+                "laravel/framework": "^10.0",
+                "guzzlehttp/guzzle": "^7.2",
+            }
+        }
+        deps = parse_composer_json(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"laravel/framework", "guzzlehttp/guzzle"}
+        assert all(d.ecosystem == "Packagist" for d in deps)
+
+    def test_require_dev_section(self):
+        data = {
+            "require-dev": {
+                "phpunit/phpunit": "^10.0",
+                "laravel/pint": "^1.0",
+            }
+        }
+        deps = parse_composer_json(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"phpunit/phpunit", "laravel/pint"}
+
+    def test_both_sections(self):
+        data = {
+            "require": {
+                "laravel/framework": "^10.0",
+            },
+            "require-dev": {
+                "phpunit/phpunit": "^10.0",
+            },
+        }
+        deps = parse_composer_json(json.dumps(data))
+        assert len(deps) == 2
+
+    def test_php_skipped(self):
+        data = {"require": {"php": ">=8.1"}}
+        deps = parse_composer_json(json.dumps(data))
+        assert deps == []
+
+    def test_ext_skipped(self):
+        data = {
+            "require": {
+                "ext-json": "*",
+                "ext-mbstring": "*",
+                "laravel/framework": "^10.0",
+            }
+        }
+        deps = parse_composer_json(json.dumps(data))
+        assert len(deps) == 1
+        assert deps[0].name == "laravel/framework"
+
+    def test_version_prefix_stripped(self):
+        data = {"require": {"guzzlehttp/guzzle": "^7.2.0"}}
+        deps = parse_composer_json(json.dumps(data))
+        assert deps[0].version == "7.2.0"
+
+    def test_tilde_prefix_stripped(self):
+        data = {"require": {"guzzlehttp/guzzle": "~7.2"}}
+        deps = parse_composer_json(json.dumps(data))
+        assert deps[0].version == "7.2"
+
+    def test_gte_prefix_stripped(self):
+        data = {"require": {"guzzlehttp/guzzle": ">=7.2.0"}}
+        deps = parse_composer_json(json.dumps(data))
+        assert deps[0].version == "7.2.0"
+
+    def test_star_version_skipped(self):
+        data = {"require": {"ext-json": "*"}}
+        deps = parse_composer_json(json.dumps(data))
+        assert deps == []
+
+    def test_dev_version_skipped(self):
+        data = {"require": {"myvendor/mypackage": "dev-master"}}
+        deps = parse_composer_json(json.dumps(data))
+        assert deps == []
+
+    def test_empty_require(self):
+        data = {"require": {}}
+        deps = parse_composer_json(json.dumps(data))
+        assert deps == []
+
+    def test_invalid_json(self):
+        deps = parse_composer_json("not json")
+        assert deps == []
+
+    def test_empty_file(self):
+        deps = parse_composer_json("{}")
+        assert deps == []
+
+    def test_non_dict_top_level(self):
+        deps = parse_composer_json(json.dumps([1, 2, 3]))
+        assert deps == []
+
+    def test_returns_dependency_instances(self):
+        data = {"require": {"laravel/framework": "^10.0"}}
+        deps = parse_composer_json(json.dumps(data))
+        assert isinstance(deps[0], Dependency)
+
+
+# =======================================================================
+# composer.lock
+# =======================================================================
+
+
+class TestParseComposerLock:
+    """Tests for PHP composer.lock parsing."""
+
+    def test_packages_section(self):
+        data = {
+            "packages": [
+                {"name": "laravel/framework", "version": "v10.0.0"},
+                {"name": "guzzlehttp/guzzle", "version": "7.5.0"},
+            ],
+            "packages-dev": [],
+        }
+        deps = parse_composer_lock(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"laravel/framework", "guzzlehttp/guzzle"}
+        assert all(d.ecosystem == "Packagist" for d in deps)
+
+    def test_packages_dev_section(self):
+        data = {
+            "packages": [],
+            "packages-dev": [
+                {"name": "phpunit/phpunit", "version": "10.2.0"},
+                {"name": "laravel/pint", "version": "1.10.0"},
+            ],
+        }
+        deps = parse_composer_lock(json.dumps(data))
+        assert len(deps) == 2
+        names = {d.name for d in deps}
+        assert names == {"phpunit/phpunit", "laravel/pint"}
+
+    def test_both_sections(self):
+        data = {
+            "packages": [
+                {"name": "laravel/framework", "version": "v10.0.0"},
+            ],
+            "packages-dev": [
+                {"name": "phpunit/phpunit", "version": "10.2.0"},
+            ],
+        }
+        deps = parse_composer_lock(json.dumps(data))
+        assert len(deps) == 2
+
+    def test_v_prefix_stripped(self):
+        data = {
+            "packages": [
+                {"name": "laravel/framework", "version": "v10.0.0"},
+            ],
+        }
+        deps = parse_composer_lock(json.dumps(data))
+        assert deps[0].version == "10.0.0"
+
+    def test_no_v_prefix(self):
+        data = {
+            "packages": [
+                {"name": "guzzlehttp/guzzle", "version": "7.5.0"},
+            ],
+        }
+        deps = parse_composer_lock(json.dumps(data))
+        assert deps[0].version == "7.5.0"
+
+    def test_empty_packages(self):
+        data = {"packages": [], "packages-dev": []}
+        deps = parse_composer_lock(json.dumps(data))
+        assert deps == []
+
+    def test_missing_name_skipped(self):
+        data = {
+            "packages": [
+                {"version": "1.0.0"},
+                {"name": "valid/package", "version": "1.0.0"},
+            ],
+        }
+        deps = parse_composer_lock(json.dumps(data))
+        assert len(deps) == 1
+        assert deps[0].name == "valid/package"
+
+    def test_missing_version_skipped(self):
+        data = {
+            "packages": [
+                {"name": "broken/package"},
+                {"name": "valid/package", "version": "1.0.0"},
+            ],
+        }
+        deps = parse_composer_lock(json.dumps(data))
+        assert len(deps) == 1
+        assert deps[0].name == "valid/package"
+
+    def test_invalid_json(self):
+        deps = parse_composer_lock("not json")
+        assert deps == []
+
+    def test_empty_file(self):
+        deps = parse_composer_lock("{}")
+        assert deps == []
+
+    def test_non_dict_top_level(self):
+        deps = parse_composer_lock(json.dumps([1, 2, 3]))
+        assert deps == []
+
+    def test_returns_dependency_instances(self):
+        data = {
+            "packages": [
+                {"name": "laravel/framework", "version": "v10.0.0"},
+            ],
+        }
+        deps = parse_composer_lock(json.dumps(data))
+        assert isinstance(deps[0], Dependency)
+
+
+# =======================================================================
+# parse_manifest auto-detection (new formats)
+# =======================================================================
+
+
+class TestParseManifestNewFormats:
+    """Tests for auto-detection of new manifest formats."""
+
+    def test_package_lock_json(self):
+        data = {
+            "lockfileVersion": 3,
+            "packages": {
+                "": {},
+                "node_modules/lodash": {"version": "4.17.21"},
+            },
+        }
+        deps = parse_manifest(json.dumps(data), "package-lock.json")
+        assert len(deps) == 1
+        assert deps[0].ecosystem == "npm"
+
+    def test_yarn_lock(self):
+        text = 'lodash@^4.17.21:\n  version "4.17.21"\n'
+        deps = parse_manifest(text, "yarn.lock")
+        assert len(deps) == 1
+        assert deps[0].ecosystem == "npm"
+
+    def test_pnpm_lock_yaml(self):
+        text = "packages:\n\n  /lodash@4.17.21:\n    resolution: {}\n"
+        deps = parse_manifest(text, "pnpm-lock.yaml")
+        assert len(deps) == 1
+        assert deps[0].ecosystem == "npm"
+
+    def test_pipfile_lock(self):
+        data = {
+            "_meta": {},
+            "default": {"flask": {"version": "==2.3.0"}},
+            "develop": {},
+        }
+        deps = parse_manifest(json.dumps(data), "Pipfile.lock")
+        assert len(deps) == 1
+        assert deps[0].ecosystem == "PyPI"
+
+    def test_go_mod(self):
+        text = "module myapp\n\nrequire github.com/gin-gonic/gin v1.9.1\n"
+        deps = parse_manifest(text, "go.mod")
+        assert len(deps) == 1
+        assert deps[0].ecosystem == "Go"
+
+    def test_go_sum(self):
+        text = "github.com/gin-gonic/gin v1.9.1 h1:abc=\n"
+        deps = parse_manifest(text, "go.sum")
+        assert len(deps) == 1
+        assert deps[0].ecosystem == "Go"
+
+    def test_composer_json(self):
+        data = {"require": {"laravel/framework": "^10.0"}}
+        deps = parse_manifest(json.dumps(data), "composer.json")
+        assert len(deps) == 1
+        assert deps[0].ecosystem == "Packagist"
+
+    def test_composer_lock(self):
+        data = {"packages": [{"name": "laravel/framework", "version": "v10.0.0"}]}
+        deps = parse_manifest(json.dumps(data), "composer.lock")
+        assert len(deps) == 1
+        assert deps[0].ecosystem == "Packagist"
+
+    def test_package_lock_json_full_path(self):
+        data = {
+            "lockfileVersion": 3,
+            "packages": {"": {}, "node_modules/a": {"version": "1.0.0"}},
+        }
+        deps = parse_manifest(json.dumps(data), "/home/user/project/package-lock.json")
+        assert len(deps) == 1
+
+    def test_go_mod_windows_path(self):
+        text = "module myapp\n\nrequire github.com/gin-gonic/gin v1.9.1\n"
+        deps = parse_manifest(text, "C:\\Users\\project\\go.mod")
+        assert len(deps) == 1
+
+    def test_all_new_parsers_return_lists(self):
+        assert isinstance(parse_package_lock_json("{}"), list)
+        assert isinstance(parse_yarn_lock(""), list)
+        assert isinstance(parse_pnpm_lock_yaml(""), list)
+        assert isinstance(parse_pipfile_lock("{}"), list)
+        assert isinstance(parse_go_mod(""), list)
+        assert isinstance(parse_go_sum(""), list)
+        assert isinstance(parse_composer_json("{}"), list)
+        assert isinstance(parse_composer_lock("{}"), list)

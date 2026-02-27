@@ -25,7 +25,20 @@ from .config import ProjectConfig, discover_config
 from .core import GuardianShield
 from .dedup import DedupResult, FindingDeduplicator
 from .findings import Finding, FindingType, Range, Remediation, Severity
-from .manifest import parse_manifest, parse_package_json, parse_pyproject_toml, parse_requirements_txt
+from .manifest import (
+    parse_composer_json,
+    parse_composer_lock,
+    parse_go_mod,
+    parse_go_sum,
+    parse_manifest,
+    parse_package_json,
+    parse_package_lock_json,
+    parse_pipfile_lock,
+    parse_pnpm_lock_yaml,
+    parse_pyproject_toml,
+    parse_requirements_txt,
+    parse_yarn_lock,
+)
 from .mcp_server import GuardianShieldMCPServer
 from .osv import Dependency, OsvCache, check_dependencies
 from .profiles import SafetyProfile, ScannerConfig
@@ -48,8 +61,16 @@ __all__ = [
     "Severity",
     "check_dependencies",
     "discover_config",
+    "parse_composer_json",
+    "parse_composer_lock",
+    "parse_go_mod",
+    "parse_go_sum",
     "parse_manifest",
     "parse_package_json",
+    "parse_package_lock_json",
+    "parse_pipfile_lock",
+    "parse_pnpm_lock_yaml",
     "parse_pyproject_toml",
     "parse_requirements_txt",
+    "parse_yarn_lock",
 ]

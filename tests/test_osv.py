@@ -11,6 +11,7 @@ import pytest
 from guardianshield.findings import FindingType, Severity
 from guardianshield.osv import (
     MAX_PAGES_PER_PACKAGE,
+    SUPPORTED_ECOSYSTEMS,
     Dependency,
     OsvCache,
     _cvss_to_severity,
@@ -1548,4 +1549,73 @@ class TestSyncRateLimit:
         # No inter-package sleep for a single package
         rate_limit_calls = [c for c in mock_sleep.call_args_list if c == call(0.1)]
         assert len(rate_limit_calls) == 0
+        cache.close()
+
+
+# -----------------------------------------------------------------------
+# Supported ecosystems expansion
+# -----------------------------------------------------------------------
+
+class TestSupportedEcosystems:
+
+    def test_pypi_in_supported(self):
+        assert "PyPI" in SUPPORTED_ECOSYSTEMS
+
+    def test_npm_in_supported(self):
+        assert "npm" in SUPPORTED_ECOSYSTEMS
+
+    def test_go_in_supported(self):
+        assert "Go" in SUPPORTED_ECOSYSTEMS
+
+    def test_packagist_in_supported(self):
+        assert "Packagist" in SUPPORTED_ECOSYSTEMS
+
+    def test_sync_accepts_go(self, tmp_path):
+        """sync() should accept Go as a valid ecosystem."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        mock_resp = _mock_urlopen({"vulns": []})
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            count = cache.sync(ecosystem="Go", packages=["github.com/gin-gonic/gin"])
+        assert count == 0
+        cache.close()
+
+    def test_sync_accepts_packagist(self, tmp_path):
+        """sync() should accept Packagist as a valid ecosystem."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        mock_resp = _mock_urlopen({"vulns": []})
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            count = cache.sync(ecosystem="Packagist", packages=["laravel/framework"])
+        assert count == 0
+        cache.close()
+
+    def test_lookup_go_ecosystem(self, tmp_path):
+        """lookup() works for Go ecosystem after storing a vulnerability."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        go_vuln = {
+            "id": "GO-2023-001",
+            "summary": "Vuln in gin",
+            "details": "A vulnerability in gin.",
+            "aliases": ["CVE-2023-9999"],
+            "affected": [{
+                "package": {"name": "github.com/gin-gonic/gin", "ecosystem": "Go"},
+                "ranges": [{"type": "SEMVER", "events": [
+                    {"introduced": "0"},
+                    {"fixed": "1.9.0"},
+                ]}],
+            }],
+            "severity": [{"type": "CVSS_V3", "score": "7.0"}],
+        }
+        mock_resp = _mock_urlopen({"vulns": [go_vuln]})
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            cache.sync(ecosystem="Go", packages=["github.com/gin-gonic/gin"])
+        results = cache.lookup("Go", "github.com/gin-gonic/gin")
+        assert len(results) == 1
+        assert results[0]["vuln_id"] == "GO-2023-001"
+        cache.close()
+
+    def test_unsupported_ecosystem_raises(self, tmp_path):
+        """sync() still rejects unknown ecosystems."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        with pytest.raises(ValueError, match="Unsupported ecosystem"):
+            cache.sync(ecosystem="Homebrew", packages=["foo"])
         cache.close()

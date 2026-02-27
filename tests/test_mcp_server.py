@@ -100,13 +100,14 @@ class TestToolsList:
         ]
         responses = _capture_output(server, msgs)
         tools = responses[0]["result"]["tools"]
-        assert len(tools) == 15
+        assert len(tools) == 16
         names = {t["name"] for t in tools}
         assert names == {
             "scan_code", "scan_input", "scan_output", "check_secrets",
             "get_profile", "set_profile", "audit_log", "get_findings",
             "shield_status", "scan_file", "scan_directory", "test_pattern",
             "check_dependencies", "sync_vulnerabilities", "parse_manifest",
+            "scan_dependencies",
         }
 
 
@@ -1014,3 +1015,90 @@ class TestExports:
         assert Dependency is not None
         assert OsvCache is not None
         assert check_dependencies is not None
+
+
+# ---------------------------------------------------------------------------
+# Phase — scan_dependencies tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestScanDependencies:
+    def test_scan_dependencies_via_mcp(self, tmp_path):
+        """scan_dependencies tool finds manifests and returns results."""
+        from unittest.mock import patch
+
+        (tmp_path / "requirements.txt").write_text("requests==2.28.0\n")
+        server = _make_server(tmp_path)
+        with patch.object(server._shield, "check_dependencies", return_value=[]):
+            msgs = [
+                {
+                    "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                    "params": {
+                        "name": "scan_dependencies",
+                        "arguments": {"path": str(tmp_path)},
+                    },
+                },
+            ]
+            responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["directory"] == str(tmp_path)
+        assert content["finding_count"] == 0
+        assert "requirements.txt" in content["manifests_found"]
+        assert content["dependency_count"] >= 1
+
+    def test_scan_dependencies_not_a_dir(self, tmp_path):
+        f = tmp_path / "file.py"
+        f.write_text("x = 1")
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_dependencies",
+                    "arguments": {"path": str(f)},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+    def test_scan_dependencies_missing_path(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "scan_dependencies", "arguments": {}},
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+    def test_scan_dependencies_empty_dir(self, tmp_path):
+        """Empty directory returns 0 findings and 0 manifests."""
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "scan_dependencies",
+                    "arguments": {"path": str(tmp_path)},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert content["finding_count"] == 0
+        assert content["dependency_count"] == 0
+
+    def test_scan_dependencies_in_capabilities(self, tmp_path):
+        """scan_dependencies should appear in shield_status capabilities."""
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "shield_status", "arguments": {}},
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        content = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert "scan_dependencies" in content["capabilities"]

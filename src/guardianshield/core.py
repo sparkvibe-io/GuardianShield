@@ -18,6 +18,7 @@ from .config import ProjectConfig
 from .content import check_content
 from .findings import Finding
 from .injection import check_injection
+from .manifest import parse_manifest
 from .osv import Dependency, OsvCache, check_dependencies as _check_dependencies
 from .patterns import EXTENSION_MAP
 from .pii import check_pii
@@ -346,6 +347,115 @@ class GuardianShield:
             "ecosystems": list({d.ecosystem for d in dependencies}),
         }
         self._log("dependencies", dep_text, findings, metadata)
+        return findings
+
+    # Known manifest filenames to detect during directory walks.
+    _MANIFEST_FILENAMES = frozenset({
+        "requirements.txt",
+        "package.json",
+        "package-lock.json",
+        "yarn.lock",
+        "pnpm-lock.yaml",
+        "Pipfile.lock",
+        "go.mod",
+        "go.sum",
+        "composer.json",
+        "composer.lock",
+        "pyproject.toml",
+    })
+
+    # Directories to always skip when walking for manifests.
+    _SKIP_DIRS = frozenset({
+        "node_modules", "__pycache__", ".git", "vendor", "venv", ".venv",
+    })
+
+    @staticmethod
+    def _is_requirements_variant(name: str) -> bool:
+        """Return True for requirements-*.txt / requirements_*.txt files."""
+        if not name.startswith("requirements"):
+            return False
+        if not name.endswith(".txt"):
+            return False
+        return name != "requirements.txt"  # exact match handled in set
+
+    def scan_dependencies_in_directory(
+        self,
+        path: str,
+        exclude: Optional[List[str]] = None,
+        on_finding: Optional[Callable[[Finding], None]] = None,
+    ) -> list[Finding]:
+        """Walk a directory tree, detect manifest files, and scan dependencies.
+
+        Args:
+            path: Root directory to walk.
+            exclude: Glob patterns for paths to skip.
+            on_finding: Optional callback invoked for each Finding.
+
+        Returns:
+            A list of :class:`Finding` instances for vulnerable dependencies.
+        """
+        path = os.path.abspath(path)
+        if not os.path.isdir(path):
+            raise NotADirectoryError(f"Not a directory: {path}")
+
+        # Combine user excludes with project config excludes.
+        exclude_patterns = list(exclude or [])
+        if self._project_config and self._project_config.exclude_paths:
+            exclude_patterns.extend(self._project_config.exclude_paths)
+
+        # Collect manifests.
+        manifests_found: list[str] = []
+        all_deps: list[Dependency] = []
+        seen: set[tuple[str, str]] = set()  # (name, ecosystem) for dedup
+
+        for dirpath, dirnames, filenames in os.walk(path):
+            # Skip hidden dirs and common noise directories.
+            dirnames[:] = [
+                d for d in dirnames
+                if not d.startswith(".") and d not in self._SKIP_DIRS
+            ]
+
+            for fname in filenames:
+                if fname not in self._MANIFEST_FILENAMES and not self._is_requirements_variant(fname):
+                    continue
+
+                fpath = os.path.join(dirpath, fname)
+                rel = os.path.relpath(fpath, path)
+                if any(fnmatch.fnmatch(rel, pat) for pat in exclude_patterns):
+                    continue
+
+                try:
+                    with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
+                        content = fh.read()
+                    deps = parse_manifest(content, fname)
+                except (OSError, ValueError):
+                    continue
+
+                if deps:
+                    manifests_found.append(rel)
+                    for dep in deps:
+                        key = (dep.name, dep.ecosystem)
+                        if key not in seen:
+                            seen.add(key)
+                            all_deps.append(dep)
+
+        # Check collected dependencies for vulnerabilities.
+        findings = self.check_dependencies(all_deps) if all_deps else []
+
+        if on_finding:
+            for f in findings:
+                on_finding(f)
+
+        # Audit log with dedicated scan type.
+        dep_text = ";".join(
+            f"{d.ecosystem}/{d.name}=={d.version}" for d in all_deps
+        ) or "(empty)"
+        metadata = {
+            "manifests_found": manifests_found,
+            "dependency_count": len(all_deps),
+        }
+        self._log("directory_dependencies", dep_text, findings, metadata)
+
         return findings
 
     @property
