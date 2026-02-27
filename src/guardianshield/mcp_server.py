@@ -33,7 +33,7 @@ import sys
 from typing import Any
 
 from .core import GuardianShield
-from .osv import Dependency, OsvCache, check_dependencies
+from .osv import Dependency
 from .profiles import list_profiles
 
 # ---------------------------------------------------------------------------
@@ -469,7 +469,6 @@ class GuardianShieldMCPServer:
     ) -> None:
         self._shield: GuardianShield | None = shield
         self._redact = redact_responses
-        self._osv_cache: OsvCache | None = None
         self._initialized = False
         logger.info("GuardianShieldMCPServer created (shield=%r)", self._shield)
 
@@ -869,9 +868,9 @@ class GuardianShieldMCPServer:
         status = self._shield.status()
         status["version"] = SERVER_INFO["version"]
         # Include OSV cache stats if available.
-        if self._osv_cache is not None:
+        if self._shield._osv_cache is not None:
             try:
-                status["osv_cache"] = self._osv_cache.stats()
+                status["osv_cache"] = self._shield.osv_cache.stats()
             except Exception:
                 status["osv_cache"] = {"error": "unavailable"}
         status["capabilities"] = [
@@ -978,6 +977,7 @@ class GuardianShieldMCPServer:
         return self._tool_success(json.dumps(result, indent=2))
 
     def _tool_check_dependencies(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
         deps_raw = args.get("dependencies")
         if not deps_raw or not isinstance(deps_raw, list):
             return self._tool_error("'dependencies' is required.")
@@ -991,10 +991,7 @@ class GuardianShieldMCPServer:
             ecosystem = d.get("ecosystem", "PyPI")
             deps.append(Dependency(name=name, version=version, ecosystem=ecosystem))
 
-        if self._osv_cache is None:
-            self._osv_cache = OsvCache()
-
-        findings = check_dependencies(deps, cache=self._osv_cache)
+        findings = self._shield.check_dependencies(deps)
         result = {
             "finding_count": len(findings),
             "findings": [f.to_dict() for f in self._maybe_redact(findings)],
@@ -1002,24 +999,23 @@ class GuardianShieldMCPServer:
         return self._tool_success(json.dumps(result, indent=2))
 
     def _tool_sync_vulnerabilities(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
         ecosystem = args.get("ecosystem")
         if not ecosystem or not isinstance(ecosystem, str):
             return self._tool_error("'ecosystem' is required.")
 
         packages = args.get("packages")
-
-        if self._osv_cache is None:
-            self._osv_cache = OsvCache()
+        cache = self._shield.osv_cache
 
         try:
-            self._osv_cache.sync(
+            cache.sync(
                 ecosystem=ecosystem,
                 packages=packages,
             )
         except Exception as exc:
             return self._tool_error(f"Sync failed: {exc}")
 
-        stats = self._osv_cache.stats()
+        stats = cache.stats()
         result = {
             "message": f"Synced {ecosystem} vulnerabilities.",
             "stats": stats,

@@ -9,6 +9,7 @@ Architecture:
     - OsvCache class manages SQLite with sync(), lookup(), is_stale()
     - check_dependencies() returns Finding list with DEPENDENCY_VULNERABILITY type
     - CVSS mapping: >= 9.0 CRITICAL, >= 7.0 HIGH, >= 4.0 MEDIUM, else LOW
+    - Version-aware filtering: compares dependency version against affected ranges
 """
 
 from __future__ import annotations
@@ -16,12 +17,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import sqlite3
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Tuple
 
 from guardianshield.findings import (
     Finding,
@@ -31,6 +33,206 @@ from guardianshield.findings import (
 )
 
 logger = logging.getLogger("guardianshield.osv")
+
+# ---------------------------------------------------------------------------
+# Version parsing and comparison (stdlib only, no external deps)
+# ---------------------------------------------------------------------------
+
+# PEP 440 pre-release label ordering: dev < alpha < beta < rc < (release)
+_PEP440_PRE_ORDER = {"dev": 0, "a": 1, "alpha": 1, "b": 2, "beta": 2, "rc": 3, "c": 3}
+
+# Regex for PEP 440 version strings (simplified but covers common formats)
+_PEP440_RE = re.compile(
+    r"^v?(?P<epoch>\d+!)?(?P<release>\d+(?:\.\d+)*)"
+    r"(?:[-_.]?(?P<pre_label>dev|a|alpha|b|beta|rc|c)(?P<pre_num>\d*))?"
+    r"(?:\.post(?P<post>\d*))?",
+    re.IGNORECASE,
+)
+
+# Regex for semver pre-release (npm): 1.2.3-beta.1
+_SEMVER_RE = re.compile(
+    r"^v?(?P<release>\d+(?:\.\d+)*)"
+    r"(?:-(?P<pre>[a-zA-Z0-9]+(?:\.[a-zA-Z0-9]+)*))?",
+    re.IGNORECASE,
+)
+
+
+def _parse_pep440(version: str) -> Tuple[Tuple[int, ...], bool, int, int, int]:
+    """Parse a PEP 440 version string into a comparable tuple.
+
+    Returns:
+        (release_tuple, is_release, pre_order, pre_num, post_num) where:
+        - release_tuple: numeric release segments, e.g. (1, 2, 3)
+        - is_release: True if no pre-release suffix (final or post release)
+        - pre_order: ordering of pre-release label (0=dev .. 3=rc)
+        - pre_num: numeric part of pre-release label
+        - post_num: post-release number (0 if not post-release)
+    """
+    m = _PEP440_RE.match(version.strip())
+    if not m:
+        raise ValueError(f"Cannot parse PEP 440 version: {version!r}")
+
+    release = tuple(int(x) for x in m.group("release").split("."))
+
+    pre_label = m.group("pre_label")
+    if pre_label:
+        label = pre_label.lower()
+        pre_order = _PEP440_PRE_ORDER.get(label, 0)
+        pre_num = int(m.group("pre_num")) if m.group("pre_num") else 0
+        return (release, False, pre_order, pre_num, 0)
+
+    # Post-release: sorts after the base release
+    post_str = m.group("post")
+    post_num = int(post_str) if post_str is not None and post_str != "" else 0
+    if post_str is not None:
+        return (release, True, 99, 0, post_num + 1)
+
+    # Final release (no pre or post suffix)
+    return (release, True, 99, 0, 0)
+
+
+def _parse_semver(version: str) -> Tuple[Tuple[int, ...], bool, str]:
+    """Parse a semver version string into a comparable tuple.
+
+    Returns:
+        (release_tuple, is_release, pre_release_str) where:
+        - release_tuple: numeric release segments, e.g. (1, 2, 3)
+        - is_release: True if no pre-release suffix
+        - pre_release_str: pre-release identifier string (for sorting)
+    """
+    m = _SEMVER_RE.match(version.strip())
+    if not m:
+        raise ValueError(f"Cannot parse semver version: {version!r}")
+
+    release = tuple(int(x) for x in m.group("release").split("."))
+
+    pre_str = m.group("pre")
+    if pre_str:
+        return (release, False, pre_str)
+
+    return (release, True, "")
+
+
+def parse_version(version: str, ecosystem: str = "PyPI") -> Tuple:
+    """Parse a version string into a comparable tuple.
+
+    Args:
+        version: Version string to parse.
+        ecosystem: Package ecosystem ("PyPI" or "npm").
+
+    Returns:
+        A tuple that supports ordering comparison for the given ecosystem.
+
+    Raises:
+        ValueError: If the version string cannot be parsed.
+    """
+    if ecosystem == "npm":
+        return _parse_semver(version)
+    return _parse_pep440(version)
+
+
+def compare_versions(v1: str, v2: str, ecosystem: str = "PyPI") -> int:
+    """Compare two version strings.
+
+    Args:
+        v1: First version string.
+        v2: Second version string.
+        ecosystem: Package ecosystem ("PyPI" or "npm").
+
+    Returns:
+        -1 if v1 < v2, 0 if v1 == v2, 1 if v1 > v2.
+
+    Raises:
+        ValueError: If either version string cannot be parsed.
+    """
+    t1 = parse_version(v1, ecosystem)
+    t2 = parse_version(v2, ecosystem)
+    if t1 < t2:
+        return -1
+    if t1 > t2:
+        return 1
+    return 0
+
+
+def _is_version_affected(
+    version: str,
+    affected_ranges: list[dict],
+    ecosystem: str = "PyPI",
+) -> bool | None:
+    """Check if a version falls within any of the affected ranges.
+
+    OSV range format uses event pairs: {"introduced": "X"} and {"fixed": "Y"}.
+    A version V is affected if V >= introduced AND V < fixed. If there is no
+    "fixed" event, all versions >= introduced are affected.
+
+    Args:
+        version: The version to check.
+        affected_ranges: List of OSV range dicts with "type" and "events".
+        ecosystem: Package ecosystem for version comparison.
+
+    Returns:
+        True if version is confirmed affected, False if confirmed not affected,
+        None if version matching could not be performed (unparseable versions,
+        no usable ranges).
+    """
+    if not affected_ranges:
+        return None
+
+    had_usable_range = False
+
+    for rng in affected_ranges:
+        rng_type = rng.get("type", "")
+        events = rng.get("events", [])
+
+        # We can compare ECOSYSTEM and SEMVER type ranges
+        if rng_type not in ("ECOSYSTEM", "SEMVER"):
+            continue
+
+        # Parse event pairs: walk events to find introduced/fixed pairs
+        # OSV events are ordered: introduced, fixed, introduced, fixed, ...
+        introduced = None
+        for event in events:
+            if "introduced" in event:
+                introduced = event["introduced"]
+            elif "fixed" in event and introduced is not None:
+                fixed = event["fixed"]
+                had_usable_range = True
+                try:
+                    # "0" means "all versions from the beginning"
+                    if introduced == "0":
+                        v_ge_intro = True
+                    else:
+                        v_ge_intro = compare_versions(
+                            version, introduced, ecosystem
+                        ) >= 0
+
+                    if v_ge_intro:
+                        v_lt_fixed = compare_versions(
+                            version, fixed, ecosystem
+                        ) < 0
+                        if v_lt_fixed:
+                            return True
+                except ValueError:
+                    continue
+                introduced = None
+
+        # Handle case where introduced has no fixed (all versions affected)
+        if introduced is not None:
+            had_usable_range = True
+            try:
+                if introduced == "0":
+                    return True
+                if compare_versions(version, introduced, ecosystem) >= 0:
+                    return True
+            except ValueError:
+                pass
+
+    if not had_usable_range:
+        return None
+
+    # We had usable ranges but the version didn't match any
+    return False
+
 
 # Default cache location
 DEFAULT_CACHE_PATH = os.path.join(
@@ -42,6 +244,9 @@ OSV_API_URL = "https://api.osv.dev/v1"
 
 # Supported ecosystems (Tier 1)
 SUPPORTED_ECOSYSTEMS = ("PyPI", "npm")
+
+# Maximum pages to fetch per package (safety limit for pagination)
+MAX_PAGES_PER_PACKAGE = 10
 
 
 def _cvss_to_severity(score: float) -> Severity:
@@ -164,23 +369,40 @@ class OsvCache:
         return count
 
     def _query_osv(self, ecosystem: str, package: str) -> list[dict[str, Any]]:
-        """Query OSV.dev API for vulnerabilities affecting a package."""
+        """Query OSV.dev API for vulnerabilities affecting a package.
+
+        Follows pagination via ``next_page_token`` up to
+        ``MAX_PAGES_PER_PACKAGE`` pages to collect all results.
+        """
         url = f"{OSV_API_URL}/query"
-        payload = json.dumps({
-            "package": {"name": package, "ecosystem": ecosystem},
-        }).encode("utf-8")
+        all_vulns: list[dict[str, Any]] = []
+        page_token: str | None = None
 
-        req = urllib.request.Request(
-            url,
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+        for _ in range(MAX_PAGES_PER_PACKAGE):
+            body: dict[str, Any] = {
+                "package": {"name": package, "ecosystem": ecosystem},
+            }
+            if page_token is not None:
+                body["page_token"] = page_token
 
-        with urllib.request.urlopen(req, timeout=30) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
+            payload = json.dumps(body).encode("utf-8")
+            req = urllib.request.Request(
+                url,
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
 
-        return data.get("vulns", [])
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+
+            all_vulns.extend(data.get("vulns", []))
+
+            page_token = data.get("next_page_token")
+            if not page_token:
+                break
+
+        return all_vulns
 
     def _store_vulns(self, vulns: list[dict[str, Any]]) -> int:
         """Store vulnerability records in the cache."""
@@ -259,11 +481,11 @@ class OsvCache:
         """Look up cached vulnerabilities for a package.
 
         Returns a list of dicts with vuln_id, summary, severity_score,
-        cwe_ids, fixed_version, and aliases.
+        cwe_ids, fixed_version, aliases, details, and affected_ranges.
         """
         rows = self._conn.execute(
             """SELECT vuln_id, summary, severity_score, cwe_ids,
-                      fixed_version, aliases, details
+                      fixed_version, aliases, details, affected_ranges
                FROM vulnerabilities
                WHERE ecosystem = ? AND package = ?""",
             (ecosystem, package),
@@ -279,6 +501,11 @@ class OsvCache:
                 "fixed_version": row["fixed_version"],
                 "aliases": json.loads(row["aliases"]) if row["aliases"] else [],
                 "details": row["details"],
+                "affected_ranges": (
+                    json.loads(row["affected_ranges"])
+                    if row["affected_ranges"]
+                    else []
+                ),
             })
 
         return results
@@ -343,6 +570,24 @@ def check_dependencies(
         for dep in deps:
             vulns = cache.lookup(dep.ecosystem, dep.name)
             for vuln in vulns:
+                affected_ranges = vuln.get("affected_ranges", [])
+
+                # Version-aware filtering
+                affected = _is_version_affected(
+                    dep.version, affected_ranges, dep.ecosystem
+                )
+
+                # Skip vulns where version is confirmed not affected
+                if affected is False:
+                    continue
+
+                # Set confidence based on version match quality
+                if affected is True:
+                    confidence = 1.0
+                else:
+                    # None — couldn't determine (no ranges, unparseable)
+                    confidence = 0.7
+
                 severity = _cvss_to_severity(vuln.get("severity_score", 0))
                 cwe_ids = vuln.get("cwe_ids", [])
                 aliases = vuln.get("aliases", [])
@@ -373,7 +618,7 @@ def check_dependencies(
                         message=message,
                         matched_text=f"{dep.name}=={dep.version}",
                         scanner="osv",
-                        confidence=1.0,
+                        confidence=confidence,
                         cwe_ids=cwe_ids,
                         remediation=remediation,
                         metadata={

@@ -44,6 +44,9 @@ site/
 # MemoryMesh
 .memorymesh/
 
+# Claude Code
+.claude/
+
 # Local docs/notes
 GEMINI.md
 docs/Critique/

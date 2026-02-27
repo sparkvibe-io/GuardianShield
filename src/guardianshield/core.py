@@ -18,6 +18,7 @@ from .config import ProjectConfig
 from .content import check_content
 from .findings import Finding
 from .injection import check_injection
+from .osv import Dependency, OsvCache, check_dependencies as _check_dependencies
 from .patterns import EXTENSION_MAP
 from .pii import check_pii
 from .profiles import SafetyProfile, load_profile, list_profiles
@@ -39,6 +40,7 @@ class GuardianShield:
         profile: str = "general",
         audit_path: Optional[str] = None,
         project_config: Optional[ProjectConfig] = None,
+        osv_cache: Optional[OsvCache] = None,
     ) -> None:
         # If project_config specifies a profile, use it (but explicit
         # profile arg takes precedence over config file).
@@ -47,6 +49,7 @@ class GuardianShield:
         self._profile = load_profile(profile)
         self._audit = AuditLog(db_path=audit_path)
         self._project_config = project_config
+        self._osv_cache = osv_cache
 
     # ------------------------------------------------------------------
     # Helpers
@@ -306,6 +309,51 @@ class GuardianShield:
 
         self._log("secrets", text, findings, {"file_path": file_path})
         return findings
+
+    def check_dependencies(
+        self,
+        dependencies: list[Dependency],
+        auto_sync: bool = True,
+    ) -> list[Finding]:
+        """Check package dependencies for known vulnerabilities.
+
+        Uses the OSV.dev local cache to look up CVEs for each dependency.
+        Results are logged to the audit database under scan_type
+        ``"dependencies"``.
+
+        Args:
+            dependencies: List of :class:`Dependency` objects to check.
+            auto_sync: If ``True``, syncs packages that are not yet cached.
+
+        Returns:
+            A list of :class:`Finding` instances for vulnerable packages.
+        """
+        if self._osv_cache is None:
+            self._osv_cache = OsvCache()
+
+        findings = _check_dependencies(
+            dependencies,
+            cache=self._osv_cache,
+            auto_sync=auto_sync,
+        )
+
+        # Build a stable, hashable representation for the audit log.
+        dep_text = ";".join(
+            f"{d.ecosystem}/{d.name}=={d.version}" for d in dependencies
+        )
+        metadata = {
+            "dependency_count": len(dependencies),
+            "ecosystems": list({d.ecosystem for d in dependencies}),
+        }
+        self._log("dependencies", dep_text, findings, metadata)
+        return findings
+
+    @property
+    def osv_cache(self) -> OsvCache:
+        """Return the shared :class:`OsvCache` instance, creating one if needed."""
+        if self._osv_cache is None:
+            self._osv_cache = OsvCache()
+        return self._osv_cache
 
     # ------------------------------------------------------------------
     # Audit / status
