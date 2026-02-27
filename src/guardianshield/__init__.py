@@ -25,6 +25,7 @@ from .config import ProjectConfig, discover_config
 from .core import GuardianShield
 from .dedup import DedupResult, FindingDeduplicator
 from .findings import Finding, FindingType, Range, Remediation, Severity
+from .manifest import parse_manifest, parse_package_json, parse_pyproject_toml, parse_requirements_txt
 from .mcp_server import GuardianShieldMCPServer
 from .osv import Dependency, OsvCache, check_dependencies
 from .profiles import SafetyProfile, ScannerConfig
@@ -47,4 +48,8 @@ __all__ = [
     "Severity",
     "check_dependencies",
     "discover_config",
+    "parse_manifest",
+    "parse_package_json",
+    "parse_pyproject_toml",
+    "parse_requirements_txt",
 ]
