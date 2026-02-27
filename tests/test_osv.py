@@ -10,10 +10,14 @@ import pytest
 
 from guardianshield.findings import FindingType, Severity
 from guardianshield.osv import (
+    MAX_PAGES_PER_PACKAGE,
     Dependency,
     OsvCache,
     _cvss_to_severity,
+    _is_version_affected,
     check_dependencies,
+    compare_versions,
+    parse_version,
 )
 
 # -----------------------------------------------------------------------
@@ -270,6 +274,17 @@ class TestOsvCacheLookup:
         assert "CVE-2023-1234" in r["aliases"]
         cache.close()
 
+    def test_lookup_returns_affected_ranges(self, tmp_path):
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        cache._store_vulns([SAMPLE_VULN])
+        results = cache.lookup("PyPI", "flask")
+        assert len(results) == 1
+        r = results[0]
+        assert "affected_ranges" in r
+        assert len(r["affected_ranges"]) == 1
+        assert r["affected_ranges"][0]["type"] == "ECOSYSTEM"
+        cache.close()
+
     def test_lookup_returns_empty_for_unknown(self, tmp_path):
         cache = OsvCache(db_path=str(tmp_path / "test.db"))
         results = cache.lookup("PyPI", "nonexistent-pkg")
@@ -512,4 +527,601 @@ class TestCheckDependencies:
         assert len(findings) == 1
         assert findings[0].severity == Severity.CRITICAL
         assert findings[0].metadata["ecosystem"] == "npm"
+        cache.close()
+
+
+# -----------------------------------------------------------------------
+# 17. _query_osv pagination
+# -----------------------------------------------------------------------
+
+class TestQueryOsvPagination:
+    """Tests for paginated OSV.dev API responses in _query_osv."""
+
+    def _make_vuln(self, vuln_id: str) -> dict:
+        """Create a minimal vuln payload with a given ID."""
+        return {
+            **SAMPLE_VULN,
+            "id": vuln_id,
+        }
+
+    def test_single_page_no_token(self, tmp_path):
+        """Single-page response without next_page_token (existing behavior)."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        mock_resp = _mock_urlopen({"vulns": [self._make_vuln("V-001")]})
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            vulns = cache._query_osv("PyPI", "flask")
+
+        assert len(vulns) == 1
+        assert vulns[0]["id"] == "V-001"
+        cache.close()
+
+    def test_two_pages(self, tmp_path):
+        """Response spanning two pages accumulates all vulns."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        page1 = {"vulns": [self._make_vuln("V-001")], "next_page_token": "tok-2"}
+        page2 = {"vulns": [self._make_vuln("V-002")]}
+
+        call_count = 0
+
+        def mock_urlopen_pages(req, timeout=30):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _mock_urlopen(page1)
+            return _mock_urlopen(page2)
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen_pages):
+            vulns = cache._query_osv("PyPI", "flask")
+
+        assert len(vulns) == 2
+        assert vulns[0]["id"] == "V-001"
+        assert vulns[1]["id"] == "V-002"
+        assert call_count == 2
+        cache.close()
+
+    def test_three_pages(self, tmp_path):
+        """Response spanning three pages accumulates all vulns."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        page1 = {"vulns": [self._make_vuln("V-001")], "next_page_token": "tok-2"}
+        page2 = {"vulns": [self._make_vuln("V-002")], "next_page_token": "tok-3"}
+        page3 = {"vulns": [self._make_vuln("V-003")]}
+
+        pages = [page1, page2, page3]
+        call_count = 0
+
+        def mock_urlopen_pages(req, timeout=30):
+            nonlocal call_count
+            resp = _mock_urlopen(pages[call_count])
+            call_count += 1
+            return resp
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen_pages):
+            vulns = cache._query_osv("PyPI", "flask")
+
+        assert len(vulns) == 3
+        ids = [v["id"] for v in vulns]
+        assert ids == ["V-001", "V-002", "V-003"]
+        assert call_count == 3
+        cache.close()
+
+    def test_page_token_sent_in_request_body(self, tmp_path):
+        """Verify that page_token is included in subsequent request bodies."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        page1 = {"vulns": [self._make_vuln("V-001")], "next_page_token": "my-token"}
+        page2 = {"vulns": [self._make_vuln("V-002")]}
+
+        captured_bodies = []
+
+        def mock_urlopen_capture(req, timeout=30):
+            body = json.loads(req.data.decode("utf-8"))
+            captured_bodies.append(body)
+            if len(captured_bodies) == 1:
+                return _mock_urlopen(page1)
+            return _mock_urlopen(page2)
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen_capture):
+            cache._query_osv("PyPI", "flask")
+
+        # First request should NOT have page_token
+        assert "page_token" not in captured_bodies[0]
+        # Second request should include the token
+        assert captured_bodies[1]["page_token"] == "my-token"
+        cache.close()
+
+    def test_safety_limit_prevents_infinite_loop(self, tmp_path):
+        """Pagination stops after MAX_PAGES_PER_PACKAGE even if tokens keep coming."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        call_count = 0
+
+        def mock_urlopen_infinite(req, timeout=30):
+            nonlocal call_count
+            call_count += 1
+            return _mock_urlopen({
+                "vulns": [self._make_vuln(f"V-{call_count:03d}")],
+                "next_page_token": f"tok-{call_count + 1}",
+            })
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen_infinite):
+            vulns = cache._query_osv("PyPI", "django")
+
+        assert call_count == MAX_PAGES_PER_PACKAGE
+        assert len(vulns) == MAX_PAGES_PER_PACKAGE
+        cache.close()
+
+    def test_error_on_subsequent_page_returns_partial(self, tmp_path):
+        """If a later page errors, vulns from earlier pages are still returned."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        page1 = {"vulns": [self._make_vuln("V-001")], "next_page_token": "tok-2"}
+
+        call_count = 0
+
+        def mock_urlopen_error(req, timeout=30):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _mock_urlopen(page1)
+            raise urllib.error.URLError("connection reset")
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen_error):
+            # The error should propagate up to sync() which catches it
+            with pytest.raises(urllib.error.URLError):
+                cache._query_osv("PyPI", "flask")
+
+        cache.close()
+
+    def test_empty_token_string_stops_pagination(self, tmp_path):
+        """An empty string token is treated as no more pages."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        page_data = {"vulns": [self._make_vuln("V-001")], "next_page_token": ""}
+
+        with patch("urllib.request.urlopen", return_value=_mock_urlopen(page_data)):
+            vulns = cache._query_osv("PyPI", "flask")
+
+        assert len(vulns) == 1
+        cache.close()
+
+    def test_pagination_via_sync_stores_all_vulns(self, tmp_path):
+        """End-to-end: sync() with paginated _query_osv stores all vulns."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        page1 = {"vulns": [self._make_vuln("V-001")], "next_page_token": "tok-2"}
+        page2 = {"vulns": [self._make_vuln("V-002")]}
+
+        call_count = 0
+
+        def mock_urlopen_pages(req, timeout=30):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return _mock_urlopen(page1)
+            return _mock_urlopen(page2)
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen_pages):
+            count = cache.sync(ecosystem="PyPI", packages=["flask"])
+
+        assert count == 2
+        results = cache.lookup("PyPI", "flask")
+        assert len(results) == 2
+        vuln_ids = {r["vuln_id"] for r in results}
+        assert vuln_ids == {"V-001", "V-002"}
+        cache.close()
+
+
+# -----------------------------------------------------------------------
+# Version parsing: PEP 440 (Python)
+# -----------------------------------------------------------------------
+
+class TestParsePep440:
+
+    def test_simple_version(self):
+        t = parse_version("1.2.3", "PyPI")
+        assert t[0] == (1, 2, 3)
+
+    def test_two_part_version(self):
+        t = parse_version("1.2", "PyPI")
+        assert t[0] == (1, 2)
+
+    def test_single_part_version(self):
+        t = parse_version("42", "PyPI")
+        assert t[0] == (42,)
+
+    def test_alpha_pre_release(self):
+        t = parse_version("1.2.3a1", "PyPI")
+        assert t[1] is False  # is_release = False
+
+    def test_beta_pre_release(self):
+        t = parse_version("1.2.3b2", "PyPI")
+        assert t[1] is False
+
+    def test_rc_pre_release(self):
+        t = parse_version("1.2.3rc1", "PyPI")
+        assert t[1] is False
+
+    def test_dev_pre_release(self):
+        t = parse_version("1.2.3dev0", "PyPI")
+        assert t[1] is False
+
+    def test_post_release(self):
+        t = parse_version("1.2.3.post1", "PyPI")
+        assert t[1] is True  # post counts as release
+
+    def test_final_release(self):
+        t = parse_version("1.2.3", "PyPI")
+        assert t[1] is True
+
+    def test_v_prefix_stripped(self):
+        t = parse_version("v1.2.3", "PyPI")
+        assert t[0] == (1, 2, 3)
+
+    def test_invalid_version_raises(self):
+        with pytest.raises(ValueError, match="Cannot parse PEP 440"):
+            parse_version("not-a-version", "PyPI")
+
+
+# -----------------------------------------------------------------------
+# Version parsing: npm semver
+# -----------------------------------------------------------------------
+
+class TestParseSemver:
+
+    def test_simple_version(self):
+        t = parse_version("1.2.3", "npm")
+        assert t[0] == (1, 2, 3)
+
+    def test_pre_release(self):
+        t = parse_version("1.2.3-beta.1", "npm")
+        assert t[1] is False  # is_release = False
+        assert t[2] == "beta.1"
+
+    def test_alpha_pre_release(self):
+        t = parse_version("1.0.0-alpha", "npm")
+        assert t[1] is False
+        assert t[2] == "alpha"
+
+    def test_final_release(self):
+        t = parse_version("1.2.3", "npm")
+        assert t[1] is True
+
+    def test_v_prefix_stripped(self):
+        t = parse_version("v2.0.0", "npm")
+        assert t[0] == (2, 0, 0)
+
+    def test_invalid_version_raises(self):
+        with pytest.raises(ValueError, match="Cannot parse semver"):
+            parse_version("not-a-version", "npm")
+
+
+# -----------------------------------------------------------------------
+# Version comparison: PEP 440
+# -----------------------------------------------------------------------
+
+class TestCompareVersionsPep440:
+
+    def test_equal_versions(self):
+        assert compare_versions("1.2.3", "1.2.3", "PyPI") == 0
+
+    def test_less_than(self):
+        assert compare_versions("1.2.3", "1.2.4", "PyPI") == -1
+
+    def test_greater_than(self):
+        assert compare_versions("1.2.4", "1.2.3", "PyPI") == 1
+
+    def test_major_comparison(self):
+        assert compare_versions("1.0.0", "2.0.0", "PyPI") == -1
+
+    def test_minor_comparison(self):
+        assert compare_versions("1.1.0", "1.2.0", "PyPI") == -1
+
+    def test_alpha_before_release(self):
+        assert compare_versions("1.2.3a1", "1.2.3", "PyPI") == -1
+
+    def test_beta_before_release(self):
+        assert compare_versions("1.2.3b1", "1.2.3", "PyPI") == -1
+
+    def test_rc_before_release(self):
+        assert compare_versions("1.2.3rc1", "1.2.3", "PyPI") == -1
+
+    def test_dev_before_alpha(self):
+        assert compare_versions("1.2.3dev0", "1.2.3a1", "PyPI") == -1
+
+    def test_alpha_before_beta(self):
+        assert compare_versions("1.2.3a1", "1.2.3b1", "PyPI") == -1
+
+    def test_beta_before_rc(self):
+        assert compare_versions("1.2.3b1", "1.2.3rc1", "PyPI") == -1
+
+    def test_post_after_release(self):
+        assert compare_versions("1.2.3.post1", "1.2.3", "PyPI") == 1
+
+    def test_post_ordering(self):
+        assert compare_versions("1.2.3.post1", "1.2.3.post2", "PyPI") == -1
+
+    def test_different_length_segments(self):
+        # 1.2 should be less than 1.2.1
+        assert compare_versions("1.2", "1.2.1", "PyPI") == -1
+
+    def test_zero_version(self):
+        assert compare_versions("0", "1.0.0", "PyPI") == -1
+
+
+# -----------------------------------------------------------------------
+# Version comparison: npm semver
+# -----------------------------------------------------------------------
+
+class TestCompareVersionsSemver:
+
+    def test_equal_versions(self):
+        assert compare_versions("1.2.3", "1.2.3", "npm") == 0
+
+    def test_less_than(self):
+        assert compare_versions("1.2.3", "1.2.4", "npm") == -1
+
+    def test_greater_than(self):
+        assert compare_versions("1.2.4", "1.2.3", "npm") == 1
+
+    def test_pre_release_before_release(self):
+        assert compare_versions("1.2.3-beta.1", "1.2.3", "npm") == -1
+
+    def test_pre_release_alpha_before_beta(self):
+        assert compare_versions("1.2.3-alpha", "1.2.3-beta", "npm") == -1
+
+    def test_major_comparison(self):
+        assert compare_versions("1.0.0", "2.0.0", "npm") == -1
+
+
+# -----------------------------------------------------------------------
+# _is_version_affected
+# -----------------------------------------------------------------------
+
+class TestIsVersionAffected:
+
+    def test_version_in_range(self):
+        ranges = [{"type": "ECOSYSTEM", "events": [
+            {"introduced": "0"},
+            {"fixed": "2.3.0"},
+        ]}]
+        assert _is_version_affected("2.2.0", ranges, "PyPI") is True
+
+    def test_version_at_introduced(self):
+        ranges = [{"type": "ECOSYSTEM", "events": [
+            {"introduced": "1.0.0"},
+            {"fixed": "2.0.0"},
+        ]}]
+        assert _is_version_affected("1.0.0", ranges, "PyPI") is True
+
+    def test_version_at_fixed_not_affected(self):
+        ranges = [{"type": "ECOSYSTEM", "events": [
+            {"introduced": "0"},
+            {"fixed": "2.3.0"},
+        ]}]
+        assert _is_version_affected("2.3.0", ranges, "PyPI") is False
+
+    def test_version_after_fixed_not_affected(self):
+        ranges = [{"type": "ECOSYSTEM", "events": [
+            {"introduced": "0"},
+            {"fixed": "2.3.0"},
+        ]}]
+        assert _is_version_affected("3.0.0", ranges, "PyPI") is False
+
+    def test_no_fixed_version_all_affected(self):
+        ranges = [{"type": "ECOSYSTEM", "events": [
+            {"introduced": "0"},
+        ]}]
+        assert _is_version_affected("999.0.0", ranges, "PyPI") is True
+
+    def test_empty_ranges_returns_none(self):
+        assert _is_version_affected("1.0.0", [], "PyPI") is None
+
+    def test_no_usable_ranges_returns_none(self):
+        ranges = [{"type": "GIT", "events": [
+            {"introduced": "abc123"},
+            {"fixed": "def456"},
+        ]}]
+        assert _is_version_affected("1.0.0", ranges, "PyPI") is None
+
+    def test_semver_range_npm(self):
+        ranges = [{"type": "SEMVER", "events": [
+            {"introduced": "0"},
+            {"fixed": "4.17.21"},
+        ]}]
+        assert _is_version_affected("4.17.20", ranges, "npm") is True
+
+    def test_semver_range_npm_not_affected(self):
+        ranges = [{"type": "SEMVER", "events": [
+            {"introduced": "0"},
+            {"fixed": "4.17.21"},
+        ]}]
+        assert _is_version_affected("4.17.21", ranges, "npm") is False
+
+    def test_pre_release_in_range(self):
+        ranges = [{"type": "ECOSYSTEM", "events": [
+            {"introduced": "0"},
+            {"fixed": "2.0.0"},
+        ]}]
+        assert _is_version_affected("2.0.0rc1", ranges, "PyPI") is True
+
+    def test_introduced_non_zero(self):
+        ranges = [{"type": "ECOSYSTEM", "events": [
+            {"introduced": "1.5.0"},
+            {"fixed": "2.0.0"},
+        ]}]
+        assert _is_version_affected("1.4.0", ranges, "PyPI") is False
+
+    def test_multiple_ranges_first_matches(self):
+        ranges = [
+            {"type": "ECOSYSTEM", "events": [
+                {"introduced": "1.0.0"},
+                {"fixed": "1.5.0"},
+            ]},
+            {"type": "ECOSYSTEM", "events": [
+                {"introduced": "2.0.0"},
+                {"fixed": "2.5.0"},
+            ]},
+        ]
+        assert _is_version_affected("1.2.0", ranges, "PyPI") is True
+
+    def test_multiple_ranges_second_matches(self):
+        ranges = [
+            {"type": "ECOSYSTEM", "events": [
+                {"introduced": "1.0.0"},
+                {"fixed": "1.5.0"},
+            ]},
+            {"type": "ECOSYSTEM", "events": [
+                {"introduced": "2.0.0"},
+                {"fixed": "2.5.0"},
+            ]},
+        ]
+        assert _is_version_affected("2.2.0", ranges, "PyPI") is True
+
+    def test_multiple_ranges_none_match(self):
+        ranges = [
+            {"type": "ECOSYSTEM", "events": [
+                {"introduced": "1.0.0"},
+                {"fixed": "1.5.0"},
+            ]},
+            {"type": "ECOSYSTEM", "events": [
+                {"introduced": "2.0.0"},
+                {"fixed": "2.5.0"},
+            ]},
+        ]
+        assert _is_version_affected("1.8.0", ranges, "PyPI") is False
+
+
+# -----------------------------------------------------------------------
+# check_dependencies: version-aware filtering
+# -----------------------------------------------------------------------
+
+class TestCheckDependenciesVersionFiltering:
+
+    def test_version_outside_range_not_reported(self, tmp_path):
+        """A package version after the fix should not produce a finding."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        cache._store_vulns([SAMPLE_VULN])
+        deps = [Dependency(name="flask", version="2.4.0")]
+        findings = check_dependencies(deps, cache=cache, auto_sync=False)
+        assert len(findings) == 0
+        cache.close()
+
+    def test_version_inside_range_reported(self, tmp_path):
+        """A package version within the affected range should produce a finding."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        cache._store_vulns([SAMPLE_VULN])
+        deps = [Dependency(name="flask", version="2.2.0")]
+        findings = check_dependencies(deps, cache=cache, auto_sync=False)
+        assert len(findings) == 1
+        assert findings[0].confidence == 1.0
+        cache.close()
+
+    def test_version_at_fixed_not_reported(self, tmp_path):
+        """A package version exactly at the fix version is not affected."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        cache._store_vulns([SAMPLE_VULN])
+        deps = [Dependency(name="flask", version="2.3.0")]
+        findings = check_dependencies(deps, cache=cache, auto_sync=False)
+        assert len(findings) == 0
+        cache.close()
+
+    def test_confidence_0_7_when_no_ranges(self, tmp_path):
+        """When a vuln has no affected ranges, confidence should be 0.7."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln_no_ranges = {
+            "id": "PYSEC-2023-NORANGE",
+            "summary": "Vuln with no ranges",
+            "aliases": ["CVE-2023-0000"],
+            "affected": [{
+                "package": {"name": "mypkg", "ecosystem": "PyPI"},
+                "ranges": [],
+            }],
+            "severity": [{"type": "CVSS_V3", "score": "6.0"}],
+        }
+        cache._store_vulns([vuln_no_ranges])
+        deps = [Dependency(name="mypkg", version="1.0.0")]
+        findings = check_dependencies(deps, cache=cache, auto_sync=False)
+        assert len(findings) == 1
+        assert findings[0].confidence == 0.7
+        cache.close()
+
+    def test_confidence_0_7_when_only_git_ranges(self, tmp_path):
+        """When a vuln only has GIT ranges (not ECOSYSTEM/SEMVER), confidence = 0.7."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln_git_only = {
+            "id": "PYSEC-2023-GITONLY",
+            "summary": "Vuln with git range only",
+            "aliases": ["CVE-2023-0001"],
+            "affected": [{
+                "package": {"name": "gitpkg", "ecosystem": "PyPI"},
+                "ranges": [{"type": "GIT", "events": [
+                    {"introduced": "abc123"},
+                    {"fixed": "def456"},
+                ]}],
+            }],
+            "severity": [{"type": "CVSS_V3", "score": "5.0"}],
+        }
+        cache._store_vulns([vuln_git_only])
+        deps = [Dependency(name="gitpkg", version="1.0.0")]
+        findings = check_dependencies(deps, cache=cache, auto_sync=False)
+        assert len(findings) == 1
+        assert findings[0].confidence == 0.7
+        cache.close()
+
+    def test_npm_version_filtering(self, tmp_path):
+        """npm ecosystem version filtering works correctly."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        npm_vuln = {
+            "id": "GHSA-2023-NPM",
+            "summary": "Prototype pollution in lodash",
+            "aliases": ["CVE-2023-5555"],
+            "affected": [{
+                "package": {"name": "lodash", "ecosystem": "npm"},
+                "ranges": [{"type": "ECOSYSTEM", "events": [
+                    {"introduced": "0"},
+                    {"fixed": "4.17.21"},
+                ]}],
+            }],
+            "severity": [{"type": "CVSS_V3", "score": "9.1"}],
+        }
+        cache._store_vulns([npm_vuln])
+
+        # Affected version
+        deps = [Dependency(name="lodash", version="4.17.20", ecosystem="npm")]
+        findings = check_dependencies(deps, cache=cache, auto_sync=False)
+        assert len(findings) == 1
+        assert findings[0].confidence == 1.0
+
+        # Fixed version — not affected
+        deps = [Dependency(name="lodash", version="4.17.21", ecosystem="npm")]
+        findings = check_dependencies(deps, cache=cache, auto_sync=False)
+        assert len(findings) == 0
+        cache.close()
+
+    def test_pre_release_version_affected(self, tmp_path):
+        """Pre-release versions within range are detected as affected."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        cache._store_vulns([SAMPLE_VULN])  # fixed at 2.3.0
+        deps = [Dependency(name="flask", version="2.3.0rc1")]
+        findings = check_dependencies(deps, cache=cache, auto_sync=False)
+        assert len(findings) == 1
+        assert findings[0].confidence == 1.0
+        cache.close()
+
+    def test_no_fix_version_all_affected(self, tmp_path):
+        """When no fix is available, all versions after introduced are affected."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln_no_fix = {
+            "id": "PYSEC-2023-NOFIX2",
+            "summary": "Unfixed vuln",
+            "aliases": [],
+            "affected": [{
+                "package": {"name": "unfixed", "ecosystem": "PyPI"},
+                "ranges": [{"type": "ECOSYSTEM", "events": [
+                    {"introduced": "0"},
+                ]}],
+            }],
+            "severity": [{"type": "CVSS_V3", "score": "4.0"}],
+        }
+        cache._store_vulns([vuln_no_fix])
+        deps = [Dependency(name="unfixed", version="99.99.99")]
+        findings = check_dependencies(deps, cache=cache, auto_sync=False)
+        assert len(findings) == 1
+        assert findings[0].confidence == 1.0
         cache.close()

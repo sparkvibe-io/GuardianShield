@@ -1,11 +1,13 @@
 """Tests for the GuardianShield core orchestrator."""
 
 import os
+from unittest.mock import patch, MagicMock
 
 import pytest
 
 from guardianshield.core import GuardianShield
-from guardianshield.findings import FindingType, Severity
+from guardianshield.findings import Finding, FindingType, Severity
+from guardianshield.osv import Dependency, OsvCache
 
 
 @pytest.fixture()
@@ -192,3 +194,122 @@ def test_input_hash_not_raw(shield):
     log = shield.get_audit_log()
     assert log[0]["input_hash"] != "Ignore previous instructions"
     assert len(log[0]["input_hash"]) == 16
+
+
+# -- check_dependencies ------------------------------------------------------
+
+
+def _make_finding(name: str, version: str) -> Finding:
+    """Helper to create a mock dependency finding."""
+    return Finding(
+        finding_type=FindingType.DEPENDENCY_VULNERABILITY,
+        severity=Severity.HIGH,
+        message=f"CVE-2023-0001: Vuln in {name}=={version}",
+        matched_text=f"{name}=={version}",
+        scanner="osv",
+        confidence=1.0,
+    )
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_check_dependencies_returns_findings(mock_check, tmp_path):
+    """check_dependencies routes through osv.check_dependencies and returns findings."""
+    mock_check.return_value = [_make_finding("requests", "2.28.0")]
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    deps = [Dependency(name="requests", version="2.28.0", ecosystem="PyPI")]
+    findings = s.check_dependencies(deps)
+    assert len(findings) == 1
+    assert findings[0].finding_type == FindingType.DEPENDENCY_VULNERABILITY
+    mock_check.assert_called_once()
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_check_dependencies_logs_to_audit(mock_check, tmp_path):
+    """check_dependencies should create an audit entry with scan_type='dependencies'."""
+    mock_check.return_value = [_make_finding("flask", "2.0.0")]
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    deps = [Dependency(name="flask", version="2.0.0", ecosystem="PyPI")]
+    s.check_dependencies(deps)
+    log = s.get_audit_log(scan_type="dependencies")
+    assert len(log) == 1
+    assert log[0]["scan_type"] == "dependencies"
+    assert log[0]["finding_count"] == 1
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_check_dependencies_no_findings_still_logs(mock_check, tmp_path):
+    """Even when there are no vulnerabilities, the scan is logged."""
+    mock_check.return_value = []
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    deps = [Dependency(name="safe-pkg", version="1.0.0")]
+    findings = s.check_dependencies(deps)
+    assert findings == []
+    log = s.get_audit_log(scan_type="dependencies")
+    assert len(log) == 1
+    assert log[0]["finding_count"] == 0
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_check_dependencies_creates_osv_cache_lazily(mock_check, tmp_path):
+    """OsvCache is created lazily if not provided."""
+    mock_check.return_value = []
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    assert s._osv_cache is None
+    s.check_dependencies([Dependency(name="pkg", version="1.0.0")])
+    assert s._osv_cache is not None
+    s.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_check_dependencies_uses_provided_cache(mock_check, tmp_path):
+    """When an OsvCache is passed to the constructor, it is reused."""
+    mock_check.return_value = []
+    db = str(tmp_path / "audit.db")
+    cache = OsvCache(db_path=str(tmp_path / "osv.db"))
+    s = GuardianShield(profile="general", audit_path=db, osv_cache=cache)
+    s.check_dependencies([Dependency(name="pkg", version="1.0.0")])
+    assert s._osv_cache is cache
+    # The mock was called with our cache
+    assert mock_check.call_args[1].get("cache") is cache or mock_check.call_args[0][1] is cache
+    s.close()
+    cache.close()
+
+
+@patch("guardianshield.core._check_dependencies")
+def test_check_dependencies_audit_metadata(mock_check, tmp_path):
+    """Audit metadata should include dependency_count and ecosystems."""
+    mock_check.return_value = []
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    deps = [
+        Dependency(name="requests", version="2.28.0", ecosystem="PyPI"),
+        Dependency(name="lodash", version="4.17.21", ecosystem="npm"),
+    ]
+    s.check_dependencies(deps)
+    log = s.get_audit_log(scan_type="dependencies")
+    assert len(log) == 1
+    import json
+    meta = json.loads(log[0]["metadata"])
+    assert meta["dependency_count"] == 2
+    assert set(meta["ecosystems"]) == {"PyPI", "npm"}
+    s.close()
+
+
+def test_osv_cache_property_creates_lazily(tmp_path):
+    """The osv_cache property should create an OsvCache if none exists."""
+    db = str(tmp_path / "audit.db")
+    s = GuardianShield(profile="general", audit_path=db)
+    assert s._osv_cache is None
+    cache = s.osv_cache
+    assert cache is not None
+    assert isinstance(cache, OsvCache)
+    # Subsequent access returns the same instance.
+    assert s.osv_cache is cache
+    s.close()
