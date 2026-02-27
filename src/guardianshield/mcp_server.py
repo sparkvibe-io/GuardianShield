@@ -33,6 +33,7 @@ import sys
 from typing import Any
 
 from .core import GuardianShield
+from .manifest import parse_manifest
 from .osv import Dependency
 from .profiles import list_profiles
 
@@ -383,6 +384,31 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["ecosystem"],
         },
     },
+    {
+        "name": "parse_manifest",
+        "description": (
+            "Parse a dependency manifest file (requirements.txt, "
+            "package.json, or pyproject.toml) into a structured list "
+            "of dependencies. Auto-detects format from the filename."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "The contents of the manifest file.",
+                },
+                "filename": {
+                    "type": "string",
+                    "description": (
+                        "Filename for format detection "
+                        "(e.g. 'requirements.txt', 'package.json', 'pyproject.toml')."
+                    ),
+                },
+            },
+            "required": ["content", "filename"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -625,6 +651,7 @@ class GuardianShieldMCPServer:
             "test_pattern": self._tool_test_pattern,
             "check_dependencies": self._tool_check_dependencies,
             "sync_vulnerabilities": self._tool_sync_vulnerabilities,
+            "parse_manifest": self._tool_parse_manifest,
         }
 
         handler = tool_handlers.get(tool_name)
@@ -1019,6 +1046,38 @@ class GuardianShieldMCPServer:
         result = {
             "message": f"Synced {ecosystem} vulnerabilities.",
             "stats": stats,
+        }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_parse_manifest(self, args: dict[str, Any]) -> dict[str, Any]:
+        content = args.get("content")
+        if not content or not isinstance(content, str):
+            return self._tool_error("'content' is required.")
+
+        filename = args.get("filename")
+        if not filename or not isinstance(filename, str):
+            return self._tool_error("'filename' is required.")
+
+        try:
+            deps = parse_manifest(content, filename)
+        except ValueError as exc:
+            return self._tool_error(str(exc))
+
+        # Determine the ecosystem from the parsed dependencies
+        ecosystems = {d.ecosystem for d in deps}
+        ecosystem = ecosystems.pop() if len(ecosystems) == 1 else "mixed"
+        if not ecosystems and not deps:
+            # Infer from filename
+            basename = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+            ecosystem = "npm" if basename == "package.json" else "PyPI"
+
+        result = {
+            "dependencies": [
+                {"name": d.name, "version": d.version, "ecosystem": d.ecosystem}
+                for d in deps
+            ],
+            "count": len(deps),
+            "ecosystem": ecosystem,
         }
         return self._tool_success(json.dumps(result, indent=2))
 

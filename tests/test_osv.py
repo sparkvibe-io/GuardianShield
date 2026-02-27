@@ -4,7 +4,7 @@ import json
 import sqlite3
 import time
 import urllib.error
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 
@@ -1124,4 +1124,428 @@ class TestCheckDependenciesVersionFiltering:
         findings = check_dependencies(deps, cache=cache, auto_sync=False)
         assert len(findings) == 1
         assert findings[0].confidence == 1.0
+        cache.close()
+
+
+# -----------------------------------------------------------------------
+# CVSS v2/v4 fallback in _store_vulns
+# -----------------------------------------------------------------------
+
+class TestCvssFallback:
+    """Tests for CVSS v2/v4 fallback severity extraction."""
+
+    def _make_vuln_with_severity(self, severity_list):
+        """Create a vuln payload with the given severity entries."""
+        return {
+            "id": "PYSEC-2023-CVSS",
+            "summary": "Test vuln",
+            "aliases": [],
+            "affected": [{
+                "package": {"name": "testpkg", "ecosystem": "PyPI"},
+                "ranges": [{"type": "ECOSYSTEM", "events": [
+                    {"introduced": "0"},
+                ]}],
+            }],
+            "severity": severity_list,
+        }
+
+    def test_cvss_v3_preferred(self, tmp_path):
+        """CVSS v3 score is used when available, even if v2 and v4 present."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln = self._make_vuln_with_severity([
+            {"type": "CVSS_V2", "score": "3.0"},
+            {"type": "CVSS_V3", "score": "7.5"},
+            {"type": "CVSS_V4", "score": "6.0"},
+        ])
+        cache._store_vulns([vuln])
+        results = cache.lookup("PyPI", "testpkg")
+        assert results[0]["severity_score"] == 7.5
+        cache.close()
+
+    def test_cvss_v4_fallback_when_no_v3(self, tmp_path):
+        """CVSS v4 score is used when v3 is absent."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln = self._make_vuln_with_severity([
+            {"type": "CVSS_V2", "score": "3.0"},
+            {"type": "CVSS_V4", "score": "8.0"},
+        ])
+        cache._store_vulns([vuln])
+        results = cache.lookup("PyPI", "testpkg")
+        assert results[0]["severity_score"] == 8.0
+        cache.close()
+
+    def test_cvss_v2_fallback_when_no_v3_or_v4(self, tmp_path):
+        """CVSS v2 score is used when v3 and v4 are absent."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln = self._make_vuln_with_severity([
+            {"type": "CVSS_V2", "score": "5.5"},
+        ])
+        cache._store_vulns([vuln])
+        results = cache.lookup("PyPI", "testpkg")
+        assert results[0]["severity_score"] == 5.5
+        cache.close()
+
+    def test_no_severity_stays_zero(self, tmp_path):
+        """No severity entries means score stays at 0.0."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln = self._make_vuln_with_severity([])
+        cache._store_vulns([vuln])
+        results = cache.lookup("PyPI", "testpkg")
+        assert results[0]["severity_score"] == 0.0
+        cache.close()
+
+    def test_cvss_v2_non_numeric_score_skipped(self, tmp_path):
+        """CVSS v2 vector string that can't be parsed as float is skipped."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln = self._make_vuln_with_severity([
+            {"type": "CVSS_V2", "score": "AV:N/AC:L/Au:N/C:P/I:P/A:P"},
+        ])
+        cache._store_vulns([vuln])
+        results = cache.lookup("PyPI", "testpkg")
+        # Vector string can't be parsed as float, so score stays 0.0
+        assert results[0]["severity_score"] == 0.0
+        cache.close()
+
+    def test_cvss_v2_numeric_used_over_unparseable_v3(self, tmp_path):
+        """A numeric v2 score is used when v3 has an unparseable value."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln = self._make_vuln_with_severity([
+            {"type": "CVSS_V3", "score": "not-a-number"},
+            {"type": "CVSS_V2", "score": "6.5"},
+        ])
+        cache._store_vulns([vuln])
+        results = cache.lookup("PyPI", "testpkg")
+        assert results[0]["severity_score"] == 6.5
+        cache.close()
+
+    def test_cvss_v3_only(self, tmp_path):
+        """Only CVSS v3 present (existing behavior preserved)."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln = self._make_vuln_with_severity([
+            {"type": "CVSS_V3", "score": "9.8"},
+        ])
+        cache._store_vulns([vuln])
+        results = cache.lookup("PyPI", "testpkg")
+        assert results[0]["severity_score"] == 9.8
+        cache.close()
+
+    def test_cvss_integer_score(self, tmp_path):
+        """Integer score value is handled correctly."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln = self._make_vuln_with_severity([
+            {"type": "CVSS_V4", "score": 7},
+        ])
+        cache._store_vulns([vuln])
+        results = cache.lookup("PyPI", "testpkg")
+        assert results[0]["severity_score"] == 7.0
+        cache.close()
+
+    def test_unknown_severity_type_ignored(self, tmp_path):
+        """Unknown severity types are skipped."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        vuln = self._make_vuln_with_severity([
+            {"type": "UNKNOWN_TYPE", "score": "10.0"},
+            {"type": "CVSS_V2", "score": "4.0"},
+        ])
+        cache._store_vulns([vuln])
+        results = cache.lookup("PyPI", "testpkg")
+        assert results[0]["severity_score"] == 4.0
+        cache.close()
+
+
+# -----------------------------------------------------------------------
+# Staleness-aware sync in check_dependencies
+# -----------------------------------------------------------------------
+
+class TestStalenessAwareSync:
+    """Tests for staleness-aware auto_sync in check_dependencies."""
+
+    def test_sync_skipped_when_cache_fresh(self, tmp_path):
+        """auto_sync=True does not call sync() when cache is fresh."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        cache._store_vulns([SAMPLE_VULN])
+        # Mark cache as recently synced (fresh)
+        cache._conn.execute(
+            "INSERT INTO sync_metadata (ecosystem, last_sync, package_count) VALUES (?, ?, ?)",
+            ("PyPI", time.time(), 1),
+        )
+        cache._conn.commit()
+
+        deps = [Dependency(name="flask", version="2.2.0")]
+        with patch.object(cache, "sync") as mock_sync:
+            findings = check_dependencies(deps, cache=cache, auto_sync=True)
+
+        mock_sync.assert_not_called()
+        assert len(findings) == 1
+        cache.close()
+
+    def test_sync_called_when_cache_stale(self, tmp_path):
+        """auto_sync=True calls sync() when cache is stale."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        # Mark cache as stale (25 hours old)
+        old_time = time.time() - (25 * 3600)
+        cache._conn.execute(
+            "INSERT INTO sync_metadata (ecosystem, last_sync, package_count) VALUES (?, ?, ?)",
+            ("PyPI", old_time, 1),
+        )
+        cache._conn.commit()
+
+        deps = [Dependency(name="flask", version="2.2.0")]
+        with patch.object(cache, "sync") as mock_sync:
+            check_dependencies(deps, cache=cache, auto_sync=True)
+
+        mock_sync.assert_called_once_with(ecosystem="PyPI", packages=["flask"])
+        cache.close()
+
+    def test_sync_called_when_no_metadata(self, tmp_path):
+        """auto_sync=True calls sync() when no sync metadata exists (new cache)."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+
+        deps = [Dependency(name="flask", version="2.2.0")]
+        with patch.object(cache, "sync") as mock_sync:
+            check_dependencies(deps, cache=cache, auto_sync=True)
+
+        mock_sync.assert_called_once()
+        cache.close()
+
+    def test_auto_sync_false_skips_sync(self, tmp_path):
+        """auto_sync=False never calls sync(), even when stale."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        cache._store_vulns([SAMPLE_VULN])
+
+        deps = [Dependency(name="flask", version="2.2.0")]
+        with patch.object(cache, "sync") as mock_sync:
+            findings = check_dependencies(deps, cache=cache, auto_sync=False)
+
+        mock_sync.assert_not_called()
+        assert len(findings) == 1
+        cache.close()
+
+    def test_staleness_checked_per_ecosystem(self, tmp_path):
+        """Each ecosystem's staleness is checked independently."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        # PyPI is fresh, npm is stale
+        cache._conn.execute(
+            "INSERT INTO sync_metadata (ecosystem, last_sync, package_count) VALUES (?, ?, ?)",
+            ("PyPI", time.time(), 1),
+        )
+        cache._conn.execute(
+            "INSERT INTO sync_metadata (ecosystem, last_sync, package_count) VALUES (?, ?, ?)",
+            ("npm", time.time() - (25 * 3600), 1),
+        )
+        cache._conn.commit()
+
+        deps = [
+            Dependency(name="flask", version="2.2.0", ecosystem="PyPI"),
+            Dependency(name="lodash", version="4.17.20", ecosystem="npm"),
+        ]
+        with patch.object(cache, "sync") as mock_sync:
+            check_dependencies(deps, cache=cache, auto_sync=True)
+
+        # Only npm should sync (PyPI is fresh)
+        mock_sync.assert_called_once_with(ecosystem="npm", packages=["lodash"])
+        cache.close()
+
+
+# -----------------------------------------------------------------------
+# Retry with exponential backoff in _query_osv
+# -----------------------------------------------------------------------
+
+class TestQueryOsvRetry:
+    """Tests for retry with exponential backoff on 429 / 5xx."""
+
+    def _make_http_error(self, code):
+        """Create a urllib.error.HTTPError with the given status code."""
+        return urllib.error.HTTPError(
+            url="https://api.osv.dev/v1/query",
+            code=code,
+            msg=f"HTTP {code}",
+            hdrs={},
+            fp=None,
+        )
+
+    def test_retry_on_429(self, tmp_path):
+        """429 errors are retried with backoff."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        success_resp = _mock_urlopen({"vulns": [SAMPLE_VULN]})
+
+        call_count = 0
+
+        def mock_urlopen(req, timeout=30):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 2:
+                raise self._make_http_error(429)
+            return success_resp
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
+             patch("time.sleep") as mock_sleep:
+            vulns = cache._query_osv("PyPI", "flask")
+
+        assert len(vulns) == 1
+        assert call_count == 3
+        # Backoff: 2^0=1s, 2^1=2s
+        assert mock_sleep.call_args_list == [call(1), call(2)]
+        cache.close()
+
+    def test_retry_on_500(self, tmp_path):
+        """500 errors are retried with backoff."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        success_resp = _mock_urlopen({"vulns": []})
+
+        call_count = 0
+
+        def mock_urlopen(req, timeout=30):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise self._make_http_error(500)
+            return success_resp
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
+             patch("time.sleep") as mock_sleep:
+            vulns = cache._query_osv("PyPI", "flask")
+
+        assert call_count == 2
+        mock_sleep.assert_called_once_with(1)  # 2^0 = 1s
+        cache.close()
+
+    def test_retry_on_503(self, tmp_path):
+        """503 errors are retried."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        success_resp = _mock_urlopen({"vulns": []})
+
+        call_count = 0
+
+        def mock_urlopen(req, timeout=30):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise self._make_http_error(503)
+            return success_resp
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
+             patch("time.sleep"):
+            vulns = cache._query_osv("PyPI", "flask")
+
+        assert call_count == 2
+        cache.close()
+
+    def test_retry_exhaustion_raises(self, tmp_path):
+        """After max retries, the original error is raised."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+
+        def mock_urlopen(req, timeout=30):
+            raise self._make_http_error(429)
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
+             patch("time.sleep"):
+            with pytest.raises(urllib.error.HTTPError) as exc_info:
+                cache._query_osv("PyPI", "flask")
+
+        assert exc_info.value.code == 429
+        cache.close()
+
+    def test_exponential_backoff_delays(self, tmp_path):
+        """Backoff delays are 1s, 2s, 4s for 3 retries."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        success_resp = _mock_urlopen({"vulns": []})
+
+        call_count = 0
+
+        def mock_urlopen(req, timeout=30):
+            nonlocal call_count
+            call_count += 1
+            if call_count <= 3:
+                raise self._make_http_error(429)
+            return success_resp
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
+             patch("time.sleep") as mock_sleep:
+            vulns = cache._query_osv("PyPI", "flask")
+
+        assert call_count == 4  # 3 failures + 1 success
+        assert mock_sleep.call_args_list == [call(1), call(2), call(4)]
+        cache.close()
+
+    def test_no_retry_on_4xx(self, tmp_path):
+        """Non-429 4xx errors are not retried."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+
+        def mock_urlopen(req, timeout=30):
+            raise self._make_http_error(404)
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
+             patch("time.sleep") as mock_sleep:
+            with pytest.raises(urllib.error.HTTPError) as exc_info:
+                cache._query_osv("PyPI", "flask")
+
+        assert exc_info.value.code == 404
+        mock_sleep.assert_not_called()
+        cache.close()
+
+    def test_no_retry_on_400(self, tmp_path):
+        """400 Bad Request is not retried."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+
+        def mock_urlopen(req, timeout=30):
+            raise self._make_http_error(400)
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
+             patch("time.sleep") as mock_sleep:
+            with pytest.raises(urllib.error.HTTPError):
+                cache._query_osv("PyPI", "flask")
+
+        mock_sleep.assert_not_called()
+        cache.close()
+
+    def test_retry_sync_catches_error_per_package(self, tmp_path):
+        """sync() catches the error from _query_osv after retry exhaustion."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+
+        def mock_urlopen(req, timeout=30):
+            raise self._make_http_error(429)
+
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
+             patch("time.sleep"):
+            # sync() should catch URLError subclass (HTTPError) and continue
+            count = cache.sync(ecosystem="PyPI", packages=["badpkg"])
+
+        assert count == 0
+        cache.close()
+
+
+# -----------------------------------------------------------------------
+# Rate limiting between packages in sync()
+# -----------------------------------------------------------------------
+
+class TestSyncRateLimit:
+    """Tests for rate limiting between packages in sync()."""
+
+    def test_sleep_between_packages(self, tmp_path):
+        """sync() sleeps 0.1s between packages but not before the first."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        mock_resp = _mock_urlopen({"vulns": []})
+
+        with patch("urllib.request.urlopen", return_value=mock_resp), \
+             patch("time.sleep") as mock_sleep:
+            cache.sync(ecosystem="PyPI", packages=["pkg1", "pkg2", "pkg3"])
+
+        # Should sleep between packages: 2 sleeps for 3 packages
+        sleep_calls = [c for c in mock_sleep.call_args_list if c == call(0.1)]
+        assert len(sleep_calls) == 2
+        cache.close()
+
+    def test_no_sleep_for_single_package(self, tmp_path):
+        """sync() does not sleep when syncing a single package."""
+        cache = OsvCache(db_path=str(tmp_path / "test.db"))
+        mock_resp = _mock_urlopen({"vulns": []})
+
+        with patch("urllib.request.urlopen", return_value=mock_resp), \
+             patch("time.sleep") as mock_sleep:
+            cache.sync(ecosystem="PyPI", packages=["pkg1"])
+
+        # No inter-package sleep for a single package
+        rate_limit_calls = [c for c in mock_sleep.call_args_list if c == call(0.1)]
+        assert len(rate_limit_calls) == 0
         cache.close()

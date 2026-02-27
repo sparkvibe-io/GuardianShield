@@ -352,7 +352,10 @@ class OsvCache:
             return 0
 
         count = 0
-        for package in packages:
+        for i, package in enumerate(packages):
+            # Rate-limit: small delay between packages to avoid hitting OSV.dev limits
+            if i > 0:
+                time.sleep(0.1)
             try:
                 vulns = self._query_osv(ecosystem, package)
                 count += self._store_vulns(vulns)
@@ -373,6 +376,9 @@ class OsvCache:
 
         Follows pagination via ``next_page_token`` up to
         ``MAX_PAGES_PER_PACKAGE`` pages to collect all results.
+
+        Retries up to 3 times with exponential backoff (1s, 2s, 4s) on
+        HTTP 429 (Too Many Requests) and 5xx server errors.
         """
         url = f"{OSV_API_URL}/query"
         all_vulns: list[dict[str, Any]] = []
@@ -393,8 +399,26 @@ class OsvCache:
                 method="POST",
             )
 
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
+            # Retry with exponential backoff on 429 / 5xx
+            last_exc: Exception | None = None
+            max_retries = 3
+            for attempt in range(max_retries + 1):
+                try:
+                    with urllib.request.urlopen(req, timeout=30) as resp:
+                        data = json.loads(resp.read().decode("utf-8"))
+                    last_exc = None
+                    break
+                except urllib.error.HTTPError as exc:
+                    if exc.code == 429 or exc.code >= 500:
+                        last_exc = exc
+                        if attempt < max_retries:
+                            delay = 2 ** attempt  # 1s, 2s, 4s
+                            time.sleep(delay)
+                            continue
+                    raise
+
+            if last_exc is not None:
+                raise last_exc
 
             all_vulns.extend(data.get("vulns", []))
 
@@ -412,17 +436,27 @@ class OsvCache:
             if not vuln_id:
                 continue
 
-            # Extract severity score
+            # Extract severity score (prefer CVSS v3 > v4 > v2)
             severity_score = 0.0
+            scores_by_type: dict[str, float] = {}
             for sev in vuln.get("severity", []):
-                if sev.get("type") == "CVSS_V3":
-                    try:
-                        score_str = sev.get("score", "0")
-                        severity_score = float(score_str) if isinstance(
-                            score_str, (int, float, str)
-                        ) else 0.0
-                    except (ValueError, TypeError):
-                        pass
+                sev_type = sev.get("type", "")
+                if sev_type not in ("CVSS_V3", "CVSS_V4", "CVSS_V2"):
+                    continue
+                try:
+                    score_str = sev.get("score", "0")
+                    if isinstance(score_str, (int, float)):
+                        scores_by_type[sev_type] = float(score_str)
+                    elif isinstance(score_str, str):
+                        # Try parsing as a plain number first
+                        scores_by_type[sev_type] = float(score_str)
+                except (ValueError, TypeError):
+                    pass
+            # Apply preference order
+            for pref in ("CVSS_V3", "CVSS_V4", "CVSS_V2"):
+                if pref in scores_by_type:
+                    severity_score = scores_by_type[pref]
+                    break
 
             # Extract CWE IDs from aliases
             cwe_ids = []
@@ -560,7 +594,7 @@ def check_dependencies(
         by_ecosystem.setdefault(dep.ecosystem, []).append(dep)
 
     for ecosystem, deps in by_ecosystem.items():
-        if auto_sync:
+        if auto_sync and cache.is_stale(ecosystem):
             packages = [d.name for d in deps]
             try:
                 cache.sync(ecosystem=ecosystem, packages=packages)
