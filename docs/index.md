@@ -38,7 +38,7 @@ code scanning, PII detection, prompt injection defense, secret detection, and au
 
 <div class="stats-row">
   <div class="stat-card">
-    <span class="stat-number">14</span>
+    <span class="stat-number">16</span>
     <span class="stat-label">MCP Tools</span>
   </div>
   <div class="stat-card">
@@ -121,10 +121,10 @@ GuardianShield sits between your AI agent and your codebase, scanning every inte
 
 </div>
 
-<!-- 14 MCP Tools -->
+<!-- 16 MCP Tools -->
 <div class="gs-section" markdown>
 
-## :material-wrench: 14 MCP Tools
+## :material-wrench: 16 MCP Tools
 
 Every security capability is exposed as a standard MCP tool — callable from any compatible AI client.
 
@@ -183,7 +183,15 @@ Every security capability is exposed as a standard MCP tool — callable from an
   </div>
   <div class="tool-card">
     <h3>sync_vulnerabilities</h3>
-    <p>Sync the local OSV vulnerability database for PyPI and npm ecosystems.</p>
+    <p>Sync the local OSV vulnerability database for PyPI, npm, Go, and Packagist ecosystems.</p>
+  </div>
+  <div class="tool-card">
+    <h3>parse_manifest</h3>
+    <p>Parse any supported manifest file into structured dependency objects for analysis.</p>
+  </div>
+  <div class="tool-card">
+    <h3>scan_dependencies</h3>
+    <p>Scan a directory for manifest files and check all dependencies for known vulnerabilities.</p>
   </div>
 </div>
 
@@ -342,7 +350,7 @@ Pre-configured security policies for different industries and use cases. Switch 
   <div class="feature-card">
     <span class="fc-icon"><span class="material-symbols-rounded ms-lg">package_2</span></span>
     <h3>Dependency Scanning</h3>
-    <p>Local-first OSV.dev integration — check PyPI and npm packages for known CVEs offline.</p>
+    <p>Local-first OSV.dev integration — check PyPI, npm, Go, and Packagist packages for known CVEs offline.</p>
   </div>
 </div>
 
@@ -369,7 +377,9 @@ Pre-configured security policies for different industries and use cases. Switch 
 | CWE Mapping | — | — | — | — | **:material-check-circle:{ .gs-check }** |
 | Finding Dedup | — | — | — | — | **:material-check-circle:{ .gs-check }** |
 | Response Redaction | — | — | — | — | **:material-check-circle:{ .gs-check }** |
-| **GuardianShield** | **1 of 14** | **2 of 14** | **2 of 14** | **1 of 14** | **14 of 14** |
+| **Manifest Parsing** | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| **Directory Dep Scan** | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| **GuardianShield** | **1 of 16** | **2 of 16** | **2 of 16** | **1 of 16** | **16 of 16** |
 
 </div>
 

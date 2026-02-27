@@ -1,9 +1,9 @@
 # GuardianShield — AI Agent Instructions
 
 GuardianShield is a universal AI security layer exposed as an MCP server.
-**Version**: 0.2.0 | **Tests**: 627 | **Dependencies**: zero (stdlib only)
+**Version**: 1.0.0 | **Tests**: 934 | **Dependencies**: zero (stdlib only)
 
-## Available MCP Tools (14)
+## Available MCP Tools (16)
 
 ### Scanning
 - **scan_code**: Scan source code for vulnerabilities and hardcoded secrets (Python + JS/TS)
@@ -12,8 +12,10 @@ GuardianShield is a universal AI security layer exposed as an MCP server.
 - **scan_input**: Check input for prompt injection attempts
 - **scan_output**: Check AI output for PII leaks and content violations
 - **check_secrets**: Dedicated secret/credential detection
-- **check_dependencies**: Check packages for known CVEs via local OSV.dev cache (PyPI + npm)
+- **check_dependencies**: Check packages for known CVEs via local OSV.dev cache (PyPI, npm, Go, Packagist)
 - **sync_vulnerabilities**: Sync the local OSV vulnerability database
+- **parse_manifest**: Parse any supported manifest file (11 formats) into dependency objects
+- **scan_dependencies**: Scan a directory for manifest files and check all dependencies for vulnerabilities
 
 ### Configuration & Utilities
 - **get_profile**: View current safety profile
@@ -31,8 +33,10 @@ GuardianShield is a universal AI security layer exposed as an MCP server.
 4. Use `scan_output` before returning AI-generated content to users
 5. Use `check_secrets` on configuration files and environment setups
 6. Use `check_dependencies` to audit package.json or requirements.txt deps
-7. Use `test_pattern` to develop and debug custom vulnerability regex patterns
-8. Switch profiles with `set_profile` based on the domain context
+7. Use `parse_manifest` to parse any dependency manifest file into structured objects
+8. Use `scan_dependencies` to audit all manifests in a directory at once
+9. Use `test_pattern` to develop and debug custom vulnerability regex patterns
+10. Switch profiles with `set_profile` based on the domain context
 
 ## Project Structure
 
@@ -52,13 +56,14 @@ src/guardianshield/
 ├── content.py       # Content moderation (heuristic patterns)
 ├── config.py        # Project config discovery (.guardianshield.yaml/.json)
 ├── dedup.py         # Finding deduplication via SHA-256 fingerprinting
-├── osv.py           # OSV.dev local-first dependency scanner (SQLite cache)
+├── osv.py           # OSV.dev local-first dependency scanner (PyPI, npm, Go, Packagist)
+├── manifest.py      # Manifest file parser (11 formats, 4 ecosystems)
 ├── audit.py         # SQLite audit log
-├── core.py          # GuardianShield orchestrator (scan_file, scan_directory)
-└── mcp_server.py    # MCP server (14 tools, 3 resources, 2 prompts)
+├── core.py          # GuardianShield orchestrator (scan_file, scan_directory, scan_dependencies_in_directory)
+└── mcp_server.py    # MCP server (16 tools, 3 resources, 2 prompts)
 ```
 
-## Key v0.2 Concepts
+## Key Concepts
 
 - **Finding fields**: All findings include `range` (LSP format), `confidence` (0.0–1.0), `cwe_ids`, and optional `remediation` (description + before/after code + auto_fixable)
 - **Language detection**: `scan_file` and `scan_code` auto-detect language from file extension via `EXTENSION_MAP`
@@ -66,12 +71,15 @@ src/guardianshield/
 - **Project config**: Place `.guardianshield.json` or `.guardianshield.yaml` in project root for profile, severity overrides, and exclude paths
 - **Streaming**: `scan_directory` emits JSON-RPC notifications (`guardianshield/scanProgress`, `guardianshield/finding`)
 - **Redaction**: `GuardianShieldMCPServer(redact_responses=True)` replaces matched_text with `[REDACTED:<hash>]`
+- **Manifest parsing**: `parse_manifest` auto-detects 11 formats; `scan_dependencies` walks directories to find and scan all manifests
+- **Version-aware CVE matching**: PEP 440 + semver parsing with affected range filtering (confidence 1.0 confirmed, 0.7 indeterminate)
+- **4 ecosystems**: PyPI, npm, Go, Packagist — all backed by local OSV.dev SQLite cache
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 627 tests
+pytest tests/ -v          # 934 tests
 ruff check src/ tests/    # Linting
 ```
 

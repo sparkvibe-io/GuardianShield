@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "guardianshield"
-version = "0.2.0"
+version = "1.0.0"
 description = "Universal AI security layer - MCP server for code scanning, PII detection, prompt injection defense, secret detection, and audit logging"
 readme = "README.md"
 license = "Apache-2.0"
@@ -25,7 +25,7 @@ keywords = [
     "code-scanning",
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
@@ -53,9 +53,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/krishnaguardianshield/guardianshield"
-Repository = "https://github.com/krishnaguardianshield/guardianshield"
-Issues = "https://github.com/krishnaguardianshield/guardianshield/issues"
+Homepage = "https://github.com/sparkvibe-io/GuardianShield"
+Repository = "https://github.com/sparkvibe-io/GuardianShield"
+Issues = "https://github.com/sparkvibe-io/GuardianShield/issues"
 
 [project.scripts]
 guardianshield-mcp = "guardianshield.mcp_server:main"

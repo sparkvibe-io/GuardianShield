@@ -15,7 +15,7 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
 [Any MCP Client: Claude Code / VS Code / Cursor / etc.]
     |  JSON-RPC over stdin/stdout
     |
-[GuardianShieldMCPServer]         <- mcp_server.py (14 tools)
+[GuardianShieldMCPServer]         <- mcp_server.py (16 tools)
     |
 [GuardianShield core]             <- core.py (orchestrator)
     |
@@ -45,7 +45,7 @@ The architecture has three distinct layers:
 
 ### `mcp_server.py` — MCP Server
 
-Hand-rolled JSON-RPC 2.0 server that implements the full MCP protocol without any SDK dependency. Reads from `stdin`, writes to `stdout`, and handles `initialize`, `tools/list`, `tools/call`, and all required MCP lifecycle methods. Exposes 14 security tools to any MCP-compatible client.
+Hand-rolled JSON-RPC 2.0 server that implements the full MCP protocol without any SDK dependency. Reads from `stdin`, writes to `stdout`, and handles `initialize`, `tools/list`, `tools/call`, and all required MCP lifecycle methods. Exposes 16 security tools to any MCP-compatible client.
 
 ### `core.py` — Orchestrator
 
@@ -97,7 +97,11 @@ Computes stable SHA-256 fingerprints for findings based on file path, line numbe
 
 ### `osv.py` — Dependency Vulnerability Scanner
 
-Local-first dependency vulnerability scanner using the OSV.dev API. Syncs vulnerability data to a local SQLite cache (`~/.guardianshield/osv_cache.db`), enabling offline lookups. Supports PyPI and npm ecosystems. Maps CVSS scores to GuardianShield severity levels and returns findings with `DEPENDENCY_VULNERABILITY` type.
+Local-first dependency vulnerability scanner using the OSV.dev API. Syncs vulnerability data to a local SQLite cache (`~/.guardianshield/osv_cache.db`), enabling offline lookups. Supports PyPI, npm, Go, and Packagist ecosystems. Maps CVSS scores to GuardianShield severity levels and returns findings with `DEPENDENCY_VULNERABILITY` type.
+
+### `manifest.py` — Manifest File Parser
+
+Parses 11 dependency manifest formats into `Dependency` objects for vulnerability checking. Supports requirements.txt (and variants), package.json, pyproject.toml, package-lock.json, yarn.lock, pnpm-lock.yaml, Pipfile.lock, go.mod, go.sum, composer.json, and composer.lock. All parsers are stdlib-only with zero external dependencies. The `parse_manifest()` function auto-detects the format from the filename and dispatches to the appropriate parser.
 
 ---
 
@@ -182,7 +186,7 @@ GuardianShield/
 |-- src/
 |   '-- guardianshield/
 |       |-- __init__.py          # Package init, public API exports
-|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (14 tools)
+|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (16 tools)
 |       |-- core.py              # Orchestrator — routes scans through scanners
 |       |-- scanner.py           # Code vulnerability scanner (uses patterns/)
 |       |-- patterns/            # Language-specific vulnerability patterns
@@ -200,6 +204,7 @@ GuardianShield/
 |       |-- config.py            # Project config discovery (.guardianshield.json/yaml)
 |       |-- dedup.py             # Finding deduplication (SHA-256 fingerprints)
 |       |-- osv.py               # OSV.dev dependency scanner (SQLite cache)
+|       |-- manifest.py          # Manifest file parser (11 formats)
 |       '-- profiles/
 |           |-- general.yaml     # Balanced defaults for everyday development
 |           |-- education.yaml   # Content safety for learning environments
@@ -216,6 +221,7 @@ GuardianShield/
 |   |-- test_findings.py
 |   |-- test_injection.py
 |   |-- test_mcp_server.py
+|   |-- test_manifest.py         # Manifest parser tests
 |   |-- test_osv.py              # OSV dependency scanner tests
 |   |-- test_patterns.py         # Language pattern tests
 |   |-- test_pii.py

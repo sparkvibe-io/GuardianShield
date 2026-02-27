@@ -330,5 +330,5 @@ content_scanner:
 ## Next Steps
 
 - **[Configuration](configuration.md)** — Fine-tune individual scanner settings beyond profiles.
-- **[MCP Server](mcp-server.md)** — Learn about all 14 MCP tools including `get_profile` and `set_profile`.
+- **[MCP Server](mcp-server.md)** — Learn about all 16 MCP tools including `get_profile` and `set_profile`.
 - **[Audit & Compliance](audit.md)** — Explore the audit trail and compliance reporting.

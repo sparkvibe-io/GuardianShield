@@ -107,7 +107,7 @@ findings = shield.scan_directory("src/", extensions=[".py", ".js"])
 
 ## MCP Server Setup
 
-GuardianShield ships with a built-in MCP server (`guardianshield-mcp`) that exposes all 14 security tools to any compatible AI client. Pick your editor and follow the one-step setup:
+GuardianShield ships with a built-in MCP server (`guardianshield-mcp`) that exposes all 16 security tools to any compatible AI client. Pick your editor and follow the one-step setup:
 
 === "Claude Code"
 
@@ -184,7 +184,7 @@ You now have GuardianShield installed and ready to protect your AI agents. Explo
 
 - **[Configuration](configuration.md)** — Fine-tune scanner sensitivity, custom patterns, and per-scanner toggles.
 - **[Safety Profiles](profiles.md)** — Learn about the five built-in profiles and how to customize them.
-- **[MCP Server](mcp-server.md)** — Deep dive into all 14 MCP tools, parameters, and response formats.
+- **[MCP Server](mcp-server.md)** — Deep dive into all 16 MCP tools, parameters, and response formats.
 
 [Configure GuardianShield :material-arrow-right:](configuration.md){ .md-button .md-button--primary }
 [Explore Profiles](profiles.md){ .md-button }
