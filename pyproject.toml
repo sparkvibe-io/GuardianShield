@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "guardianshield"
-version = "0.1.0"
+version = "0.2.0"
 description = "Universal AI security layer - MCP server for code scanning, PII detection, prompt injection defense, secret detection, and audit logging"
 readme = "README.md"
 license = "Apache-2.0"
