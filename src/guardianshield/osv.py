@@ -448,8 +448,21 @@ class OsvCache:
                     if isinstance(score_str, (int, float)):
                         scores_by_type[sev_type] = float(score_str)
                     elif isinstance(score_str, str):
-                        # Try parsing as a plain number first
-                        scores_by_type[sev_type] = float(score_str)
+                        try:
+                            scores_by_type[sev_type] = float(score_str)
+                        except ValueError:
+                            # CVSS vector string (e.g. "CVSS:3.1/AV:N/...").
+                            # Extract base score from the vector's trailing
+                            # numeric segment if present, otherwise skip.
+                            import re as _re
+                            m = _re.search(r"(\d+(?:\.\d+))$", score_str)
+                            if m:
+                                scores_by_type[sev_type] = float(m.group(1))
+                            else:
+                                logger.debug(
+                                    "Unparseable CVSS score for %s: %s",
+                                    vuln_id, score_str,
+                                )
                 except (ValueError, TypeError):
                     pass
             # Apply preference order
@@ -598,7 +611,7 @@ def check_dependencies(
             packages = [d.name for d in deps]
             try:
                 cache.sync(ecosystem=ecosystem, packages=packages)
-            except Exception as exc:
+            except (OSError, urllib.error.URLError, ValueError, sqlite3.Error) as exc:
                 logger.warning("Sync failed for %s: %s", ecosystem, exc)
 
         for dep in deps:
