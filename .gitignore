@@ -50,3 +50,17 @@ site/
 # Local docs/notes
 GEMINI.md
 docs/Critique/
+
+# Research / vision / planning (local only)
+**/vision/
+**/Vision/
+**/research/
+**/Research/
+**/critique/
+**/Critique/
+vision*.md
+Vision*.md
+research*.md
+Research*.md
+critique*.md
+Critique*.md
