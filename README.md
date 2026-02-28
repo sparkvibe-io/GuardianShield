@@ -1,7 +1,7 @@
 # GuardianShield
 
-[![PyPI version](https://img.shields.io/pypi/v/guardianshield)](https://pypi.org/project/guardianshield/)
-[![Python](https://img.shields.io/pypi/pyversions/guardianshield)](https://pypi.org/project/guardianshield/)
+[![PyPI version](https://img.shields.io/pypi/v/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
+[![Python](https://img.shields.io/pypi/pyversions/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![License](https://img.shields.io/github/license/sparkvibe-io/GuardianShield)](https://github.com/sparkvibe-io/GuardianShield/blob/main/LICENSE)
 [![Tests](https://img.shields.io/badge/tests-934%20passing-brightgreen)]()
 
