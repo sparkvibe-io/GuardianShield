@@ -3,7 +3,6 @@
 from guardianshield.findings import FindingType, Severity
 from guardianshield.secrets import check_secrets
 
-
 # -----------------------------------------------------------------------
 # 1. AWS Access Key
 # -----------------------------------------------------------------------
@@ -29,7 +28,7 @@ def test_aws_secret_key():
     text = 'aws_secret_access_key = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"'
     findings = check_secrets(text)
     assert any(f.metadata["secret_type"] == "AWS Secret Key" for f in findings)
-    secret_finding = [f for f in findings if f.metadata["secret_type"] == "AWS Secret Key"][0]
+    secret_finding = next(f for f in findings if f.metadata["secret_type"] == "AWS Secret Key")
     assert secret_finding.severity == Severity.CRITICAL
     # Full secret must not appear in matched_text
     assert "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" not in secret_finding.matched_text
@@ -43,7 +42,7 @@ def test_github_personal_access_token():
     text = 'GITHUB_TOKEN=ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl'
     findings = check_secrets(text)
     assert len(findings) >= 1
-    f = [f for f in findings if f.metadata["secret_type"] == "GitHub Token"][0]
+    f = next(f for f in findings if f.metadata["secret_type"] == "GitHub Token")
     assert f.severity == Severity.HIGH
     assert f.matched_text.startswith("ghp_")
     assert "REDACTED" in f.matched_text
@@ -92,7 +91,7 @@ def test_rsa_private_key():
     text = '-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA0Z3VS5JJcds...'
     findings = check_secrets(text)
     assert any(f.metadata["secret_type"] == "Private Key" for f in findings)
-    pk = [f for f in findings if f.metadata["secret_type"] == "Private Key"][0]
+    pk = next(f for f in findings if f.metadata["secret_type"] == "Private Key")
     assert pk.severity == Severity.CRITICAL
 
 
@@ -120,7 +119,7 @@ def test_jwt_detection():
     )
     findings = check_secrets(token)
     assert any(f.metadata["secret_type"] == "JWT" for f in findings)
-    jwt_finding = [f for f in findings if f.metadata["secret_type"] == "JWT"][0]
+    jwt_finding = next(f for f in findings if f.metadata["secret_type"] == "JWT")
     assert jwt_finding.severity == Severity.MEDIUM
 
 

@@ -10,7 +10,6 @@ from guardianshield.patterns import (
 )
 from guardianshield.scanner import VULNERABILITY_PATTERNS, scan_code
 
-
 # ===================================================================
 # 1. Import / Structure tests
 # ===================================================================
@@ -237,7 +236,7 @@ class TestJsChildProcess:
         names = [f.metadata["pattern_name"] for f in findings]
         assert "js_child_process_exec" in names
 
-    def test_positive_execSync(self):
+    def test_positive_exec_sync(self):
         code = 'execSync("git status");'
         findings = scan_code(code, sensitivity="high", language="javascript")
         names = [f.metadata["pattern_name"] for f in findings]
@@ -249,13 +248,13 @@ class TestJsChildProcess:
         names = [f.metadata["pattern_name"] for f in findings]
         assert "js_child_process_exec" in names
 
-    def test_positive_spawnSync(self):
+    def test_positive_spawn_sync(self):
         code = 'spawnSync("ls", ["-la"]);'
         findings = scan_code(code, sensitivity="high", language="javascript")
         names = [f.metadata["pattern_name"] for f in findings]
         assert "js_child_process_exec" in names
 
-    def test_positive_execFile(self):
+    def test_positive_exec_file(self):
         code = 'execFile("/bin/sh", ["-c", cmd]);'
         findings = scan_code(code, sensitivity="high", language="javascript")
         names = [f.metadata["pattern_name"] for f in findings]

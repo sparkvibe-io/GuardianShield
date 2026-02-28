@@ -664,9 +664,8 @@ class TestQueryOsvPagination:
                 return _mock_urlopen(page1)
             raise urllib.error.URLError("connection reset")
 
-        with patch("urllib.request.urlopen", side_effect=mock_urlopen_error):
-            # The error should propagate up to sync() which catches it
-            with pytest.raises(urllib.error.URLError):
+        with patch("urllib.request.urlopen", side_effect=mock_urlopen_error), \
+             pytest.raises(urllib.error.URLError):
                 cache._query_osv("PyPI", "flask")
 
         cache.close()
@@ -1405,7 +1404,7 @@ class TestQueryOsvRetry:
 
         with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
              patch("time.sleep") as mock_sleep:
-            vulns = cache._query_osv("PyPI", "flask")
+            cache._query_osv("PyPI", "flask")
 
         assert call_count == 2
         mock_sleep.assert_called_once_with(1)  # 2^0 = 1s
@@ -1427,7 +1426,7 @@ class TestQueryOsvRetry:
 
         with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
              patch("time.sleep"):
-            vulns = cache._query_osv("PyPI", "flask")
+            cache._query_osv("PyPI", "flask")
 
         assert call_count == 2
         cache.close()
@@ -1440,9 +1439,8 @@ class TestQueryOsvRetry:
             raise self._make_http_error(429)
 
         with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
-             patch("time.sleep"):
-            with pytest.raises(urllib.error.HTTPError) as exc_info:
-                cache._query_osv("PyPI", "flask")
+             patch("time.sleep"), pytest.raises(urllib.error.HTTPError) as exc_info:
+            cache._query_osv("PyPI", "flask")
 
         assert exc_info.value.code == 429
         cache.close()
@@ -1463,7 +1461,7 @@ class TestQueryOsvRetry:
 
         with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
              patch("time.sleep") as mock_sleep:
-            vulns = cache._query_osv("PyPI", "flask")
+            cache._query_osv("PyPI", "flask")
 
         assert call_count == 4  # 3 failures + 1 success
         assert mock_sleep.call_args_list == [call(1), call(2), call(4)]
@@ -1477,9 +1475,8 @@ class TestQueryOsvRetry:
             raise self._make_http_error(404)
 
         with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
-             patch("time.sleep") as mock_sleep:
-            with pytest.raises(urllib.error.HTTPError) as exc_info:
-                cache._query_osv("PyPI", "flask")
+             patch("time.sleep") as mock_sleep, pytest.raises(urllib.error.HTTPError) as exc_info:
+            cache._query_osv("PyPI", "flask")
 
         assert exc_info.value.code == 404
         mock_sleep.assert_not_called()
@@ -1493,9 +1490,8 @@ class TestQueryOsvRetry:
             raise self._make_http_error(400)
 
         with patch("urllib.request.urlopen", side_effect=mock_urlopen), \
-             patch("time.sleep") as mock_sleep:
-            with pytest.raises(urllib.error.HTTPError):
-                cache._query_osv("PyPI", "flask")
+             patch("time.sleep") as mock_sleep, pytest.raises(urllib.error.HTTPError):
+            cache._query_osv("PyPI", "flask")
 
         mock_sleep.assert_not_called()
         cache.close()

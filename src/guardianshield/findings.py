@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import json
 import uuid
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any
 
 
 class Severity(str, Enum):
@@ -59,7 +59,7 @@ class Range:
         }
 
     @classmethod
-    def from_lsp(cls, data: dict[str, Any]) -> "Range":
+    def from_lsp(cls, data: dict[str, Any]) -> Range:
         """Deserialize from LSP ``Range`` format."""
         return cls(
             start_line=data["start"]["line"],
@@ -97,7 +97,7 @@ class Remediation:
         return d
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Remediation":
+    def from_dict(cls, data: dict[str, Any]) -> Remediation:
         """Deserialize from a plain dict."""
         return cls(
             description=data.get("description", ""),
@@ -122,7 +122,7 @@ class Finding:
         finding_id: Unique identifier for this finding.
         metadata: Additional scanner-specific data.
         range: Precise character range in LSP format (0-based).
-        confidence: Detection confidence (0.0–1.0).
+        confidence: Detection confidence (0.0-1.0).
         cwe_ids: List of CWE identifiers (e.g. ``["CWE-89"]``).
         remediation: Machine-readable fix suggestion.
     """
@@ -132,14 +132,14 @@ class Finding:
     message: str
     matched_text: str = ""
     line_number: int = 0
-    file_path: Optional[str] = None
+    file_path: str | None = None
     scanner: str = ""
     finding_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     metadata: dict[str, Any] = field(default_factory=dict)
-    range: Optional[Range] = None
-    confidence: Optional[float] = None
-    cwe_ids: List[str] = field(default_factory=list)
-    remediation: Optional[Remediation] = None
+    range: Range | None = None
+    confidence: float | None = None
+    cwe_ids: list[str] = field(default_factory=list)
+    remediation: Remediation | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict.
@@ -174,7 +174,7 @@ class Finding:
         return json.dumps(self.to_dict(), ensure_ascii=False)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "Finding":
+    def from_dict(cls, data: dict[str, Any]) -> Finding:
         """Deserialize from a plain dict.
 
         Tolerates missing v0.2 fields so older serialized findings

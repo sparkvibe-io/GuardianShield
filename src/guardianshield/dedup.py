@@ -9,7 +9,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .findings import Finding
 
@@ -46,12 +46,12 @@ class DedupResult:
     """
 
     scan_id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
-    new: List[Finding] = field(default_factory=list)
-    unchanged: List[Finding] = field(default_factory=list)
-    removed: List[str] = field(default_factory=list)
-    all_findings: List[Finding] = field(default_factory=list)
+    new: list[Finding] = field(default_factory=list)
+    unchanged: list[Finding] = field(default_factory=list)
+    removed: list[str] = field(default_factory=list)
+    all_findings: list[Finding] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "scan_id": self.scan_id,
             "new_count": len(self.new),
@@ -78,20 +78,20 @@ class FindingDeduplicator:
     """
 
     def __init__(self) -> None:
-        self._previous: Dict[str, Finding] = {}
+        self._previous: dict[str, Finding] = {}
 
     @property
     def previous_fingerprints(self) -> set[str]:
         """Return the set of fingerprints from the last scan."""
         return set(self._previous.keys())
 
-    def deduplicate(self, findings: List[Finding]) -> DedupResult:
+    def deduplicate(self, findings: list[Finding]) -> DedupResult:
         """Compare *findings* against the last scan and return a delta.
 
         After this call, the internal state is updated to reflect *findings*
         as the new baseline.
         """
-        current: Dict[str, Finding] = {}
+        current: dict[str, Finding] = {}
         for f in findings:
             fp = _fingerprint(f)
             current[fp] = f

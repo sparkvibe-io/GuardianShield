@@ -13,7 +13,7 @@ import os
 import sqlite3
 import threading
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from guardianshield.findings import Finding
 
@@ -60,7 +60,7 @@ class AuditLog:
         database is stored at ``~/.guardianshield/audit.db``.
     """
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         if db_path is None:
             db_path = _DEFAULT_DB
 
@@ -87,7 +87,7 @@ class AuditLog:
         profile: str,
         input_hash: str,
         findings: list[Finding],
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> int:
         """Record a scan and its findings.
 
@@ -129,7 +129,7 @@ class AuditLog:
 
     def query_log(
         self,
-        scan_type: Optional[str] = None,
+        scan_type: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -160,9 +160,9 @@ class AuditLog:
 
     def get_findings(
         self,
-        audit_id: Optional[int] = None,
-        finding_type: Optional[str] = None,
-        severity: Optional[str] = None,
+        audit_id: int | None = None,
+        finding_type: str | None = None,
+        severity: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """Return finding rows with optional filters."""
@@ -213,7 +213,7 @@ class AuditLog:
             last_row = self._conn.execute(
                 "SELECT timestamp FROM audit_log ORDER BY id DESC LIMIT 1"
             ).fetchone()
-            last_scan_time: Optional[str] = last_row["timestamp"] if last_row else None
+            last_scan_time: str | None = last_row["timestamp"] if last_row else None
 
         return {
             "total_scans": total_scans,

@@ -26,6 +26,7 @@ Usage::
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -968,22 +969,18 @@ class GuardianShieldMCPServer:
         exclude = args.get("exclude")
 
         def _on_progress(fpath: str, done: int, total: int) -> None:
-            try:
+            with contextlib.suppress(OSError):
                 self._send_notification(
                     "guardianshield/scanProgress",
                     {"file": fpath, "done": done, "total": total},
                 )
-            except OSError:
-                pass  # Don't abort scan if notification write fails
 
         def _on_finding(f: Any) -> None:
-            try:
+            with contextlib.suppress(OSError):
                 self._send_notification(
                     "guardianshield/finding",
                     {"finding": f.to_dict()},
                 )
-            except OSError:
-                pass  # Don't abort scan if notification write fails
 
         try:
             findings = self._shield.scan_directory(
@@ -1224,7 +1221,7 @@ class GuardianShieldMCPServer:
             sys.stdout.flush()
         except BrokenPipeError:
             logger.info("Client disconnected (broken pipe)")
-            raise SystemExit(0)
+            raise SystemExit(0) from None
         except OSError as exc:
             logger.warning("Failed to write message: %s", exc)
             raise

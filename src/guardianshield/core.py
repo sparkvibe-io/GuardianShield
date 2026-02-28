@@ -12,7 +12,7 @@ import fnmatch
 import hashlib
 import logging
 import os
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable
 
 from . import __version__
 from .audit import AuditLog
@@ -21,13 +21,13 @@ from .content import check_content
 from .findings import Finding
 from .injection import check_injection
 from .manifest import parse_manifest
-from .osv import Dependency, OsvCache, check_dependencies as _check_dependencies
+from .osv import Dependency, OsvCache
+from .osv import check_dependencies as _check_dependencies
 from .patterns import EXTENSION_MAP
 from .pii import check_pii
-from .profiles import SafetyProfile, load_profile, list_profiles
+from .profiles import SafetyProfile, list_profiles, load_profile
 from .scanner import scan_code as _scan_code
 from .secrets import check_secrets
-
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +44,9 @@ class GuardianShield:
     def __init__(
         self,
         profile: str = "general",
-        audit_path: Optional[str] = None,
-        project_config: Optional[ProjectConfig] = None,
-        osv_cache: Optional[OsvCache] = None,
+        audit_path: str | None = None,
+        project_config: ProjectConfig | None = None,
+        osv_cache: OsvCache | None = None,
     ) -> None:
         # If project_config specifies a profile, use it (but explicit
         # profile arg takes precedence over config file).
@@ -75,7 +75,7 @@ class GuardianShield:
         scan_type: str,
         text: str,
         findings: list[Finding],
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Persist a scan event to the audit log."""
         self._audit.log_scan(
@@ -96,7 +96,7 @@ class GuardianShield:
         return self._profile
 
     @property
-    def project_config(self) -> Optional[ProjectConfig]:
+    def project_config(self) -> ProjectConfig | None:
         """Return the project configuration, if any."""
         return self._project_config
 
@@ -122,8 +122,8 @@ class GuardianShield:
     def scan_code(
         self,
         code: str,
-        file_path: Optional[str] = None,
-        language: Optional[str] = None,
+        file_path: str | None = None,
+        language: str | None = None,
     ) -> list[Finding]:
         """Scan source code for vulnerabilities and hardcoded secrets.
 
@@ -194,7 +194,7 @@ class GuardianShield:
     def scan_file(
         self,
         path: str,
-        language: Optional[str] = None,
+        language: str | None = None,
     ) -> list[Finding]:
         """Scan a single source file for vulnerabilities and secrets.
 
@@ -214,17 +214,17 @@ class GuardianShield:
             IsADirectoryError: If *path* is a directory.
         """
         path = os.path.abspath(path)
-        with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        with open(path, encoding="utf-8", errors="replace") as fh:
             code = fh.read()
         return self.scan_code(code, file_path=path, language=language)
 
     def scan_directory(
         self,
         path: str,
-        extensions: Optional[List[str]] = None,
-        exclude: Optional[List[str]] = None,
-        on_progress: Optional[Callable[[str, int, int], None]] = None,
-        on_finding: Optional[Callable[[Finding], None]] = None,
+        extensions: list[str] | None = None,
+        exclude: list[str] | None = None,
+        on_progress: Callable[[str, int, int], None] | None = None,
+        on_finding: Callable[[Finding], None] | None = None,
     ) -> list[Finding]:
         """Recursively scan a directory for vulnerabilities and secrets.
 
@@ -299,7 +299,7 @@ class GuardianShield:
     def check_secrets(
         self,
         text: str,
-        file_path: Optional[str] = None,
+        file_path: str | None = None,
     ) -> list[Finding]:
         """Dedicated secret detection scan."""
         findings: list[Finding] = []
@@ -387,8 +387,8 @@ class GuardianShield:
     def scan_dependencies_in_directory(
         self,
         path: str,
-        exclude: Optional[List[str]] = None,
-        on_finding: Optional[Callable[[Finding], None]] = None,
+        exclude: list[str] | None = None,
+        on_finding: Callable[[Finding], None] | None = None,
     ) -> list[Finding]:
         """Walk a directory tree, detect manifest files, and scan dependencies.
 
@@ -431,7 +431,7 @@ class GuardianShield:
                     continue
 
                 try:
-                    with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
+                    with open(fpath, encoding="utf-8", errors="replace") as fh:
                         content = fh.read()
                     deps = parse_manifest(content, fname)
                 except (OSError, ValueError) as exc:
@@ -486,7 +486,7 @@ class GuardianShield:
 
     def get_audit_log(
         self,
-        scan_type: Optional[str] = None,
+        scan_type: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[dict[str, Any]]:
@@ -497,9 +497,9 @@ class GuardianShield:
 
     def get_findings(
         self,
-        audit_id: Optional[int] = None,
-        finding_type: Optional[str] = None,
-        severity: Optional[str] = None,
+        audit_id: int | None = None,
+        finding_type: str | None = None,
+        severity: str | None = None,
         limit: int = 100,
     ) -> list[dict[str, Any]]:
         """Retrieve past findings from the audit database."""

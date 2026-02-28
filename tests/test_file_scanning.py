@@ -10,7 +10,6 @@ import pytest
 
 from guardianshield.core import GuardianShield
 
-
 # Sample code strings for testing. These contain patterns the scanner detects.
 # They are written to temp files and scanned -- never executed.
 _PY_VULN = "import random\ntoken = random.randint(0, 999)\n"

@@ -9,7 +9,6 @@ and illegal-activity categories.  Patterns are intentionally tuned to match
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
 
 from guardianshield.findings import Finding, FindingType, Range, Severity
 
@@ -23,7 +22,7 @@ from guardianshield.findings import Finding, FindingType, Range, Severity
 
 _FLAGS = re.IGNORECASE
 
-ContentPattern = Tuple[re.Pattern[str], str, float, List[str]]
+ContentPattern = tuple[re.Pattern[str], str, float, list[str]]
 
 CONTENT_PATTERNS: dict[str, list[ContentPattern]] = {
     # ------------------------------------------------------------------
@@ -227,7 +226,7 @@ _SENSITIVITY_ALLOWED: dict[str, set[Severity]] = {
 def check_content(
     text: str,
     sensitivity: str = "medium",
-    blocked_categories: Optional[List[str]] = None,
+    blocked_categories: list[str] | None = None,
 ) -> list[Finding]:
     """Scan *text* for content-policy violations.
 

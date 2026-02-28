@@ -7,7 +7,6 @@ from guardianshield.patterns.javascript import JAVASCRIPT_REMEDIATION
 from guardianshield.patterns.python import PYTHON_REMEDIATION
 from guardianshield.scanner import scan_code
 
-
 # -- Remediation map coverage ------------------------------------------------
 
 def test_common_remediation_has_all_common_patterns():

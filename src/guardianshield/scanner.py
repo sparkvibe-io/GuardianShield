@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Optional
 
 from guardianshield.findings import Finding, FindingType, Range, Remediation, Severity
 from guardianshield.patterns import (
@@ -58,8 +57,8 @@ def _min_severity_for_sensitivity(sensitivity: str) -> int:
 def scan_code(
     code: str,
     sensitivity: str = "medium",
-    file_path: Optional[str] = None,
-    language: Optional[str] = None,
+    file_path: str | None = None,
+    language: str | None = None,
 ) -> list[Finding]:
     """Scan source code for common security vulnerabilities.
 

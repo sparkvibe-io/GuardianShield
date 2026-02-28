@@ -1,8 +1,7 @@
 """Tests for the content moderation module."""
 
-from guardianshield.content import CONTENT_PATTERNS, check_content
+from guardianshield.content import check_content
 from guardianshield.findings import FindingType, Severity
-
 
 # ---- helpers ---------------------------------------------------------------
 

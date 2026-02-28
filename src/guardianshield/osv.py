@@ -23,7 +23,7 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Tuple
+from typing import Any
 
 from guardianshield.findings import (
     Finding,
@@ -57,7 +57,7 @@ _SEMVER_RE = re.compile(
 )
 
 
-def _parse_pep440(version: str) -> Tuple[Tuple[int, ...], bool, int, int, int]:
+def _parse_pep440(version: str) -> tuple[tuple[int, ...], bool, int, int, int]:
     """Parse a PEP 440 version string into a comparable tuple.
 
     Returns:
@@ -91,7 +91,7 @@ def _parse_pep440(version: str) -> Tuple[Tuple[int, ...], bool, int, int, int]:
     return (release, True, 99, 0, 0)
 
 
-def _parse_semver(version: str) -> Tuple[Tuple[int, ...], bool, str]:
+def _parse_semver(version: str) -> tuple[tuple[int, ...], bool, str]:
     """Parse a semver version string into a comparable tuple.
 
     Returns:
@@ -113,7 +113,7 @@ def _parse_semver(version: str) -> Tuple[Tuple[int, ...], bool, str]:
     return (release, True, "")
 
 
-def parse_version(version: str, ecosystem: str = "PyPI") -> Tuple:
+def parse_version(version: str, ecosystem: str = "PyPI") -> tuple:
     """Parse a version string into a comparable tuple.
 
     Args:
@@ -629,11 +629,7 @@ def check_dependencies(
                     continue
 
                 # Set confidence based on version match quality
-                if affected is True:
-                    confidence = 1.0
-                else:
-                    # None — couldn't determine (no ranges, unparseable)
-                    confidence = 0.7
+                confidence = 1.0 if affected is True else 0.7
 
                 severity = _cvss_to_severity(vuln.get("severity_score", 0))
                 cwe_ids = vuln.get("cwe_ids", [])

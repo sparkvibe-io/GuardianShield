@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict
+from typing import Any
 
 from guardianshield.findings import FindingType, Severity
 
@@ -90,7 +90,7 @@ JAVASCRIPT_PATTERNS: list[
 ]
 
 # Remediation guidance keyed by pattern name.
-JAVASCRIPT_REMEDIATION: Dict[str, Dict[str, Any]] = {
+JAVASCRIPT_REMEDIATION: dict[str, dict[str, Any]] = {
     "js_function_constructor": {
         "description": "Avoid new Function(). Use a safe parser or pre-compiled functions.",
         "before": 'const fn = new Function("return " + userInput);',
