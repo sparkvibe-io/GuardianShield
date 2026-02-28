@@ -2,6 +2,21 @@
 
 All notable changes to GuardianShield are documented here.
 
+## [1.0.1] — 2026-02-27
+
+### Added
+- CI workflow: Python 3.9/3.11/3.13 matrix with ruff linting and pytest
+- PyPI publish workflow: trusted publisher via OIDC on GitHub release
+- Registry configs: smithery.yaml, glama.json, server.json, MCP server-card.json
+- CHANGELOG.md with full version history
+- 400×400 PNG logo for marketplace submissions
+- MCP autodiscovery via .well-known/mcp/server-card.json
+
+### Changed
+- README: expanded tool table from 9→16, added badges, features, config section
+- Docs workflow: copies .well-known into site/ for autodiscovery
+- .gitignore: excludes research/vision/critique files
+
 ## [1.0.0] — 2025-06-01
 
 ### Added
