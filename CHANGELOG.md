@@ -2,6 +2,20 @@
 
 All notable changes to GuardianShield are documented here.
 
+## [1.0.2] — 2026-02-28
+
+### Fixed
+- **CVSS vector parsing**: OSV API returns CVSS vector strings, not numeric scores — all vulnerabilities were incorrectly mapped to LOW severity
+- **Stale version in status()**: `core.py` hardcoded `"0.2.0"` instead of using `__version__`
+- **Double audit logging**: `scan_dependencies_in_directory` logged twice (once via `check_dependencies`, once directly)
+- **Silent file/manifest skipping**: Added logging for files and manifests skipped during directory scans
+- **Notification callback errors**: Wrapped MCP notification callbacks to prevent scan aborts on broken pipes
+- **Overly broad exception handling**: Narrowed bare `except Exception` blocks in osv.py and manifest.py
+
+### Added
+- MCP registry ownership tag (`mcp-name`) in README for Official MCP Registry validation
+- `dependencies` and `directory_dependencies` to audit_log scan_type enum
+
 ## [1.0.1] — 2026-02-27
 
 ### Added
