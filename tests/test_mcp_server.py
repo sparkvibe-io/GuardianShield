@@ -1026,7 +1026,7 @@ class TestScanDependencies:
 
         (tmp_path / "requirements.txt").write_text("requests==2.28.0\n")
         server = _make_server(tmp_path)
-        with patch.object(server._shield, "check_dependencies", return_value=[]):
+        with patch("guardianshield.core._check_dependencies", return_value=[]):
             msgs = [
                 {
                     "jsonrpc": "2.0", "id": 1, "method": "tools/call",
