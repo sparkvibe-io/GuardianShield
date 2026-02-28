@@ -7,7 +7,7 @@ These patterns match constructs that are common across multiple languages
 from __future__ import annotations
 
 import re
-from typing import Any, Dict
+from typing import Any
 
 from guardianshield.findings import FindingType, Severity
 
@@ -49,7 +49,7 @@ COMMON_PATTERNS: list[
 ]
 
 # Remediation guidance keyed by pattern name.
-COMMON_REMEDIATION: Dict[str, Dict[str, Any]] = {
+COMMON_REMEDIATION: dict[str, dict[str, Any]] = {
     "xss_innerhtml": {
         "description": "Use textContent for plain text or a sanitizer library (e.g. DOMPurify) for HTML.",
         "before": "element.innerHTML = userInput;",

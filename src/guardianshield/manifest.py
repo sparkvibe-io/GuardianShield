@@ -33,7 +33,6 @@ import json
 import logging
 import re
 import sys
-from typing import List
 
 from .osv import Dependency
 
@@ -56,7 +55,7 @@ _REQ_RE = re.compile(
 )
 
 
-def parse_requirements_txt(text: str) -> List[Dependency]:
+def parse_requirements_txt(text: str) -> list[Dependency]:
     """Parse a pip requirements.txt file into Dependency objects.
 
     Handles pinned versions (``==``), compatible releases (``~=``), minimum
@@ -70,7 +69,7 @@ def parse_requirements_txt(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="PyPI".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
 
     for raw_line in text.splitlines():
         line = raw_line.strip()
@@ -108,7 +107,7 @@ def parse_requirements_txt(text: str) -> List[Dependency]:
 _NPM_VERSION_PREFIX_RE = re.compile(r"^[~^>=<!\s]+")
 
 
-def parse_package_json(text: str) -> List[Dependency]:
+def parse_package_json(text: str) -> list[Dependency]:
     """Parse an npm package.json file into Dependency objects.
 
     Reads both ``dependencies`` and ``devDependencies``. Version prefixes
@@ -122,7 +121,7 @@ def parse_package_json(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="npm".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
 
     try:
         data = json.loads(text)
@@ -177,7 +176,6 @@ def _parse_toml_fallback(text: str) -> dict:
     """
     result: dict = {}
     current_table: dict = result
-    current_path: List[str] = []
 
     lines = text.splitlines()
     i = 0
@@ -195,7 +193,6 @@ def _parse_toml_fallback(text: str) -> dict:
         if table_match:
             path = [p.strip().strip('"').strip("'")
                     for p in table_match.group(1).split(".")]
-            current_path = path
             # Navigate/create nested dicts
             current_table = result
             for key in path:
@@ -243,9 +240,9 @@ def _parse_toml_fallback(text: str) -> dict:
     return result
 
 
-def _parse_toml_array(text: str) -> List[str]:
+def _parse_toml_array(text: str) -> list[str]:
     """Extract string items from a TOML array literal."""
-    items: List[str] = []
+    items: list[str] = []
     # Find all quoted strings
     for m in re.finditer(r'"([^"]*)"', text):
         items.append(m.group(1))
@@ -266,7 +263,7 @@ def _parse_toml(text: str) -> dict:
     return _parse_toml_fallback(text)
 
 
-def parse_pyproject_toml(text: str) -> List[Dependency]:
+def parse_pyproject_toml(text: str) -> list[Dependency]:
     """Parse a PEP 621 pyproject.toml into Dependency objects.
 
     Reads ``[project.dependencies]`` and all groups under
@@ -279,7 +276,7 @@ def parse_pyproject_toml(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="PyPI".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
 
     try:
         data = _parse_toml(text)
@@ -310,7 +307,7 @@ def parse_pyproject_toml(text: str) -> List[Dependency]:
     return deps
 
 
-def _add_pep508_dep(spec: str, deps: List[Dependency]) -> None:
+def _add_pep508_dep(spec: str, deps: list[Dependency]) -> None:
     """Parse a PEP 508 dependency specifier and append to deps if versioned."""
     # Strip environment markers
     clean = spec.split(";")[0].strip()
@@ -326,7 +323,7 @@ def _add_pep508_dep(spec: str, deps: List[Dependency]) -> None:
 # ---------------------------------------------------------------------------
 
 
-def parse_package_lock_json(text: str) -> List[Dependency]:
+def parse_package_lock_json(text: str) -> list[Dependency]:
     """Parse an npm package-lock.json into Dependency objects.
 
     Supports lockfileVersion 2 and 3 (``packages`` dict) with fallback
@@ -338,7 +335,7 @@ def parse_package_lock_json(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="npm".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
 
     try:
         data = json.loads(text)
@@ -379,7 +376,7 @@ def parse_package_lock_json(text: str) -> List[Dependency]:
 
 
 def _collect_lock_v1_deps(
-    dependencies: dict, deps: List[Dependency]
+    dependencies: dict, deps: list[Dependency]
 ) -> None:
     """Recursively collect dependencies from lockfileVersion 1 format."""
     for name, info in dependencies.items():
@@ -405,7 +402,7 @@ _YARN_ENTRY_RE = re.compile(
 _YARN_VERSION_RE = re.compile(r'^\s+version\s+"([^"]+)"')
 
 
-def parse_yarn_lock(text: str) -> List[Dependency]:
+def parse_yarn_lock(text: str) -> list[Dependency]:
     """Parse a yarn.lock (v1 format) into Dependency objects.
 
     Yarn v1 lockfiles use an indented key-value format where each entry
@@ -417,7 +414,7 @@ def parse_yarn_lock(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="npm".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
     seen: set = set()
     current_name: str | None = None
 
@@ -474,7 +471,7 @@ _PNPM_PKG_RE = re.compile(
 )
 
 
-def parse_pnpm_lock_yaml(text: str) -> List[Dependency]:
+def parse_pnpm_lock_yaml(text: str) -> list[Dependency]:
     """Parse a pnpm-lock.yaml into Dependency objects.
 
     Uses simple string parsing (no YAML library) to extract package names
@@ -487,7 +484,7 @@ def parse_pnpm_lock_yaml(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="npm".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
     seen: set = set()
     in_packages = False
 
@@ -526,7 +523,7 @@ def parse_pnpm_lock_yaml(text: str) -> List[Dependency]:
 # ---------------------------------------------------------------------------
 
 
-def parse_pipfile_lock(text: str) -> List[Dependency]:
+def parse_pipfile_lock(text: str) -> list[Dependency]:
     """Parse a Pipfile.lock into Dependency objects.
 
     Reads both ``default`` and ``develop`` sections. Strips ``==`` prefix
@@ -538,7 +535,7 @@ def parse_pipfile_lock(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="PyPI".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
 
     try:
         data = json.loads(text)
@@ -581,7 +578,7 @@ _GO_REQUIRE_RE = re.compile(
 )
 
 
-def parse_go_mod(text: str) -> List[Dependency]:
+def parse_go_mod(text: str) -> list[Dependency]:
     """Parse a go.mod file into Dependency objects.
 
     Reads ``require`` blocks (both parenthesized and single-line forms).
@@ -593,7 +590,7 @@ def parse_go_mod(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="Go".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
     in_require = False
     in_block = False
 
@@ -650,7 +647,7 @@ def parse_go_mod(text: str) -> List[Dependency]:
 # ---------------------------------------------------------------------------
 
 
-def parse_go_sum(text: str) -> List[Dependency]:
+def parse_go_sum(text: str) -> list[Dependency]:
     """Parse a go.sum file into Dependency objects.
 
     Each line has the format: ``module/path v1.2.3 h1:hash=`` or
@@ -663,7 +660,7 @@ def parse_go_sum(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="Go".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
     seen: set = set()
 
     for line in text.splitlines():
@@ -697,7 +694,7 @@ def parse_go_sum(text: str) -> List[Dependency]:
 _COMPOSER_VERSION_PREFIX_RE = re.compile(r"^[~^>=<!\s|]+")
 
 
-def parse_composer_json(text: str) -> List[Dependency]:
+def parse_composer_json(text: str) -> list[Dependency]:
     """Parse a PHP composer.json into Dependency objects.
 
     Reads ``require`` and ``require-dev`` sections. Skips ``php`` and
@@ -710,7 +707,7 @@ def parse_composer_json(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="Packagist".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
 
     try:
         data = json.loads(text)
@@ -749,7 +746,7 @@ def parse_composer_json(text: str) -> List[Dependency]:
 # ---------------------------------------------------------------------------
 
 
-def parse_composer_lock(text: str) -> List[Dependency]:
+def parse_composer_lock(text: str) -> list[Dependency]:
     """Parse a PHP composer.lock into Dependency objects.
 
     Reads ``packages`` and ``packages-dev`` arrays. Strips leading ``v``
@@ -761,7 +758,7 @@ def parse_composer_lock(text: str) -> List[Dependency]:
     Returns:
         List of Dependency objects with ecosystem="Packagist".
     """
-    deps: List[Dependency] = []
+    deps: list[Dependency] = []
 
     try:
         data = json.loads(text)
@@ -819,7 +816,7 @@ _FILENAME_MAP = {
 _REQUIREMENTS_RE = re.compile(r"^requirements[-_]?\w*\.txt$", re.IGNORECASE)
 
 
-def parse_manifest(text: str, filename: str) -> List[Dependency]:
+def parse_manifest(text: str, filename: str) -> list[Dependency]:
     """Auto-detect manifest format from filename and parse dependencies.
 
     Supported filenames:

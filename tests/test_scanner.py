@@ -3,7 +3,6 @@
 from guardianshield.findings import FindingType, Severity
 from guardianshield.scanner import scan_code
 
-
 # ---------------------------------------------------------------------------
 # SQL Injection
 # ---------------------------------------------------------------------------

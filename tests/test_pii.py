@@ -3,7 +3,6 @@
 from guardianshield.findings import FindingType, Severity
 from guardianshield.pii import check_pii
 
-
 # ---------------------------------------------------------------------------
 # Helper
 # ---------------------------------------------------------------------------

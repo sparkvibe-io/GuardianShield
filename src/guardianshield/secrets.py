@@ -9,7 +9,6 @@ raw secrets are never stored or transmitted.
 from __future__ import annotations
 
 import re
-from typing import List, Optional, Tuple
 
 from guardianshield.findings import Finding, FindingType, Range, Severity
 
@@ -21,7 +20,7 @@ from guardianshield.findings import Finding, FindingType, Range, Severity
 # Patterns are compiled at module level so the cost is paid once on import.
 # ---------------------------------------------------------------------------
 
-_SECRET_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, float, List[str]]] = [
+_SECRET_PATTERNS: list[tuple[str, re.Pattern[str], Severity, str, float, list[str]]] = [
     # 1. AWS Access Key ID  (always starts with AKIA, 20 uppercase alphanumeric)
     (
         "AWS Access Key",
@@ -204,8 +203,8 @@ def _redact(match_text: str, pattern_name: str) -> str:
 def check_secrets(
     text: str,
     sensitivity: str = "medium",
-    file_path: Optional[str] = None,
-) -> List[Finding]:
+    file_path: str | None = None,
+) -> list[Finding]:
     """Scan *text* for hardcoded secrets and credentials.
 
     Parameters
@@ -227,7 +226,7 @@ def check_secrets(
     """
     sensitivity = sensitivity.lower()
     threshold = _SENSITIVITY_THRESHOLD.get(sensitivity, _SENSITIVITY_THRESHOLD["medium"])
-    findings: List[Finding] = []
+    findings: list[Finding] = []
 
     lines = text.splitlines()
     for line_idx, line in enumerate(lines, start=1):

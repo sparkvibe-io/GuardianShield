@@ -10,7 +10,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 # PyYAML is optional -- fall back gracefully when unavailable.
 try:
@@ -41,9 +41,9 @@ class ScannerConfig:
 
     enabled: bool = True
     sensitivity: str = "medium"
-    custom_patterns: List[str] = field(default_factory=list)
+    custom_patterns: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict."""
         return {
             "enabled": self.enabled,
@@ -52,7 +52,7 @@ class ScannerConfig:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "ScannerConfig":
+    def from_dict(cls, data: dict[str, Any]) -> ScannerConfig:
         """Deserialize from a plain dict."""
         return cls(
             enabled=data.get("enabled", True),
@@ -88,9 +88,9 @@ class SafetyProfile:
     injection_detector: ScannerConfig = field(default_factory=ScannerConfig)
     pii_detector: ScannerConfig = field(default_factory=ScannerConfig)
     content_moderator: ScannerConfig = field(default_factory=ScannerConfig)
-    blocked_categories: List[str] = field(default_factory=list)
+    blocked_categories: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict."""
         return {
             "name": self.name,
@@ -104,7 +104,7 @@ class SafetyProfile:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> "SafetyProfile":
+    def from_dict(cls, data: dict[str, Any]) -> SafetyProfile:
         """Deserialize from a plain dict."""
         return cls(
             name=data["name"],
@@ -122,7 +122,7 @@ class SafetyProfile:
 # Built-in profiles (plain dicts)
 # ---------------------------------------------------------------------------
 
-BUILTIN_PROFILES: Dict[str, Dict[str, Any]] = {
+BUILTIN_PROFILES: dict[str, dict[str, Any]] = {
     "general": {
         "name": "general",
         "description": "General-purpose safety profile with medium sensitivity across all scanners.",
@@ -197,8 +197,8 @@ def load_profile(name: str) -> SafetyProfile:
     if _HAS_YAML:
         yaml_path = _PROFILES_DIR / f"{name}.yaml"
         if yaml_path.is_file():
-            with open(yaml_path, "r", encoding="utf-8") as fh:
-                data: Dict[str, Any] = yaml.safe_load(fh)
+            with open(yaml_path, encoding="utf-8") as fh:
+                data: dict[str, Any] = yaml.safe_load(fh)
             return SafetyProfile.from_dict(data)
 
     # Fall back to built-in dict.
@@ -211,7 +211,7 @@ def load_profile(name: str) -> SafetyProfile:
     )
 
 
-def list_profiles() -> List[str]:
+def list_profiles() -> list[str]:
     """Return a sorted list of all available profile names.
 
     Merges names found in the YAML ``profiles/`` directory (if readable)

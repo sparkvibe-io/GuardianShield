@@ -1,8 +1,8 @@
 """Language-specific vulnerability pattern sets."""
 
 from guardianshield.patterns.common import COMMON_PATTERNS, COMMON_REMEDIATION
-from guardianshield.patterns.python import PYTHON_PATTERNS, PYTHON_REMEDIATION
 from guardianshield.patterns.javascript import JAVASCRIPT_PATTERNS, JAVASCRIPT_REMEDIATION
+from guardianshield.patterns.python import PYTHON_PATTERNS, PYTHON_REMEDIATION
 
 # Map of language identifier -> pattern list.
 # Keys should be lowercase.  Multiple aliases can point to the same list.

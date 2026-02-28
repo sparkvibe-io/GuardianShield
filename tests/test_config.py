@@ -1,13 +1,11 @@
 """Tests for project configuration discovery."""
 
 import json
-import os
 
 import pytest
 
 from guardianshield.config import ProjectConfig, discover_config, load_config
 from guardianshield.core import GuardianShield
-
 
 # -- ProjectConfig dataclass --------------------------------------------------
 
@@ -97,7 +95,7 @@ class TestLoadConfig:
     def test_load_yaml(self, tmp_path):
         """YAML loading works when PyYAML is available."""
         try:
-            import yaml
+            import yaml  # noqa: F401
         except ImportError:
             pytest.skip("PyYAML not installed")
 
@@ -110,7 +108,7 @@ class TestLoadConfig:
     def test_load_yml_extension(self, tmp_path):
         """Also supports .yml extension."""
         try:
-            import yaml
+            import yaml  # noqa: F401
         except ImportError:
             pytest.skip("PyYAML not installed")
 
@@ -150,7 +148,7 @@ class TestDiscoverConfig:
         json_file.write_text(json.dumps({"profile": "finance"}))
 
         try:
-            import yaml
+            import yaml  # noqa: F401
 
             yaml_file = tmp_path / ".guardianshield.yaml"
             yaml_file.write_text("profile: education\n")

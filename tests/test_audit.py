@@ -7,7 +7,6 @@ import os
 from guardianshield.audit import AuditLog
 from guardianshield.findings import Finding, FindingType, Severity
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -21,7 +20,7 @@ def _make_finding(
     return Finding(finding_type=finding_type, severity=severity, message=message, **kwargs)
 
 
-def _db_path(tmp_path) -> str:  # noqa: ANN001
+def _db_path(tmp_path) -> str:
     return str(tmp_path / "audit.db")
 
 

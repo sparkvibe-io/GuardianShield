@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -24,11 +24,11 @@ class ProjectConfig:
         config_path: Path to the config file that was loaded (None if defaults).
     """
 
-    profile: Optional[str] = None
-    severity_overrides: Dict[str, str] = field(default_factory=dict)
-    exclude_paths: List[str] = field(default_factory=list)
-    custom_patterns: List[Dict[str, Any]] = field(default_factory=list)
-    config_path: Optional[str] = None
+    profile: str | None = None
+    severity_overrides: dict[str, str] = field(default_factory=dict)
+    exclude_paths: list[str] = field(default_factory=list)
+    custom_patterns: list[dict[str, Any]] = field(default_factory=list)
+    config_path: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         d: dict[str, Any] = {}
@@ -46,8 +46,8 @@ class ProjectConfig:
 
     @classmethod
     def from_dict(
-        cls, data: dict[str, Any], config_path: Optional[str] = None
-    ) -> "ProjectConfig":
+        cls, data: dict[str, Any], config_path: str | None = None
+    ) -> ProjectConfig:
         return cls(
             profile=data.get("profile"),
             severity_overrides=data.get("severity_overrides", {}),
@@ -59,7 +59,7 @@ class ProjectConfig:
 
 def _load_json(path: str) -> dict[str, Any]:
     """Load a JSON config file."""
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -71,8 +71,8 @@ def _load_yaml(path: str) -> dict[str, Any]:
         raise ImportError(
             "PyYAML is required to load .guardianshield.yaml files. "
             "Install it with: pip install pyyaml"
-        )
-    with open(path, "r", encoding="utf-8") as f:
+        ) from None
+    with open(path, encoding="utf-8") as f:
         return yaml.safe_load(f) or {}
 
 
@@ -85,9 +85,9 @@ _CONFIG_FILENAMES = [
 
 
 def discover_config(
-    start_dir: Optional[str] = None,
+    start_dir: str | None = None,
     max_depth: int = 10,
-) -> Optional[ProjectConfig]:
+) -> ProjectConfig | None:
     """Walk up the directory tree looking for a GuardianShield config file.
 
     Args:

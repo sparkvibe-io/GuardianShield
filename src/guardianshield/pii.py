@@ -9,7 +9,6 @@ enhanced detection.
 from __future__ import annotations
 
 import re
-from typing import List, Tuple
 
 from guardianshield.findings import Finding, FindingType, Range, Severity
 
@@ -19,7 +18,7 @@ from guardianshield.findings import Finding, FindingType, Range, Severity
 #              confidence, cwe_ids)
 # ---------------------------------------------------------------------------
 
-PII_PATTERNS: List[Tuple[str, "re.Pattern[str]", Severity, str, str, float, List[str]]] = [
+PII_PATTERNS: list[tuple[str, re.Pattern[str], Severity, str, str, float, list[str]]] = [
     (
         "Email Address",
         re.compile(r"[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+"),
@@ -181,7 +180,7 @@ def check_pii(
     findings: list[Finding] = []
 
     for line_number, line in enumerate(text.splitlines(), start=1):
-        for name, pattern, severity, description, pii_type, confidence, cwe_ids in PII_PATTERNS:
+        for _name, pattern, severity, description, pii_type, confidence, cwe_ids in PII_PATTERNS:
             if not _severity_allowed(severity, sensitivity):
                 continue
             for match in pattern.finditer(line):
@@ -213,7 +212,7 @@ def check_pii(
 # Optional Presidio backend
 # ---------------------------------------------------------------------------
 
-def _check_pii_presidio(text: str) -> "list[Finding] | None":
+def _check_pii_presidio(text: str) -> list[Finding] | None:
     """Try to detect PII using the Presidio analyzer.
 
     Returns a list of findings on success, or ``None`` if Presidio is

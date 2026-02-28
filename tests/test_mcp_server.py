@@ -1,22 +1,17 @@
 """Tests for the GuardianShield MCP server."""
 
-import json
 import io
+import json
 import sys
-from unittest.mock import patch, PropertyMock
+from unittest.mock import patch
 
 import pytest
 
 from guardianshield.core import GuardianShield
 from guardianshield.mcp_server import (
-    TOOLS,
-    RESOURCES,
-    PROMPTS,
-    GuardianShieldMCPServer,
-    SERVER_INFO,
     MCP_PROTOCOL_VERSION,
+    GuardianShieldMCPServer,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -839,6 +834,7 @@ class TestCheckDependencies:
     def test_check_dependencies_via_mcp(self, tmp_path):
         """check_dependencies tool routes through shield and returns findings."""
         from unittest.mock import patch
+
         from guardianshield.findings import Finding, FindingType, Severity
 
         server = _make_server(tmp_path)
@@ -930,7 +926,7 @@ class TestCheckDependencies:
 class TestSyncVulnerabilities:
     def test_sync_via_mcp(self, tmp_path):
         """sync_vulnerabilities tool should use shield's osv_cache."""
-        from unittest.mock import patch, MagicMock
+        from unittest.mock import MagicMock
 
         server = _make_server(tmp_path)
         mock_cache = MagicMock()
@@ -997,15 +993,15 @@ class TestExports:
 
     def test_v2_types_exported(self):
         from guardianshield import (
+            DedupResult,
+            Dependency,
+            FindingDeduplicator,
+            OsvCache,
+            ProjectConfig,
             Range,
             Remediation,
-            DedupResult,
-            FindingDeduplicator,
-            ProjectConfig,
-            discover_config,
-            Dependency,
-            OsvCache,
             check_dependencies,
+            discover_config,
         )
         assert Range is not None
         assert Remediation is not None

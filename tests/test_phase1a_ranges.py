@@ -4,13 +4,12 @@ Verifies that every scanner module populates the ``range``, ``confidence``,
 and ``cwe_ids`` fields on :class:`Finding` objects.
 """
 
-from guardianshield.findings import FindingType, Range, Severity
-from guardianshield.scanner import scan_code
-from guardianshield.secrets import check_secrets
+from guardianshield.content import check_content
+from guardianshield.findings import FindingType
 from guardianshield.injection import check_injection
 from guardianshield.pii import check_pii
-from guardianshield.content import check_content
-
+from guardianshield.scanner import scan_code
+from guardianshield.secrets import check_secrets
 
 # =========================================================================
 # scanner.py  (code vulnerability scanner)
@@ -34,8 +33,8 @@ class TestScannerRange:
     def test_range_columns_match_regex(self):
         # Test that eval() detection has correct column offsets
         code = '    result = do_eval(user_input)'
-        findings = scan_code(code, sensitivity="high")
-        # This may or may not match depending on pattern; use os.system instead
+        scan_code(code, sensitivity="high")
+        # This may or may not match depending on pattern; use a different test instead
         code2 = '    os.system(cmd)'
         findings2 = scan_code(code2, sensitivity="high")
         os_findings = [f for f in findings2 if "os.system" in f.message]

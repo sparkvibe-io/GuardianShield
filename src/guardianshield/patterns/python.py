@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict
+from typing import Any
 
 from guardianshield.findings import FindingType, Severity
 
@@ -186,7 +186,7 @@ PYTHON_PATTERNS: list[
 ]
 
 # Remediation guidance keyed by pattern name.
-PYTHON_REMEDIATION: Dict[str, Dict[str, Any]] = {
+PYTHON_REMEDIATION: dict[str, dict[str, Any]] = {
     "sql_injection_string_format": {
         "description": "Use parameterized queries instead of string formatting.",
         "before": 'query = "SELECT * FROM users WHERE id=" + user_id',

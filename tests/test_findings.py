@@ -10,7 +10,6 @@ from guardianshield.findings import (
     Severity,
 )
 
-
 # -- Severity & FindingType enums ------------------------------------------
 
 def test_severity_values():

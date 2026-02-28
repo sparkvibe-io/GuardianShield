@@ -20,7 +20,6 @@ from guardianshield.manifest import (
 )
 from guardianshield.osv import Dependency
 
-
 # =======================================================================
 # requirements.txt
 # =======================================================================

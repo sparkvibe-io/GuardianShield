@@ -7,7 +7,6 @@ strings as test data. No vulnerable code is executed.
 from guardianshield.dedup import DedupResult, FindingDeduplicator, _fingerprint
 from guardianshield.findings import Finding, FindingType, Severity
 
-
 # -- Helpers ------------------------------------------------------------------
 
 def _make_finding(
@@ -146,7 +145,7 @@ class TestFindingDeduplicator:
         original = [_make_finding(line_number=1)]
         dedup.deduplicate(original)
 
-        updated = original + [_make_finding(line_number=2)]
+        updated = [*original, _make_finding(line_number=2)]
         result = dedup.deduplicate(updated)
         assert len(result.new) == 1
         assert result.new[0].line_number == 2
