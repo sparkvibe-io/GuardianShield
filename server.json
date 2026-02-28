@@ -1,0 +1,36 @@
+{
+  "$schema": "https://cdn.mcphub.io/specs/mcp-server-descriptor-2025-12-11.json",
+  "server": {
+    "name": "io.github.sparkvibe-io/guardianshield",
+    "version": "1.0.0",
+    "description": "Universal AI security layer — code scanning, PII detection, prompt injection defense, secret detection, dependency auditing, and audit logging.",
+    "homepage": "https://github.com/sparkvibe-io/GuardianShield",
+    "repository": "https://github.com/sparkvibe-io/GuardianShield",
+    "documentation": "https://sparkvibe-io.github.io/GuardianShield/",
+    "license": "Apache-2.0",
+    "runtime": "python",
+    "transport": ["stdio"],
+    "package": {
+      "registry": "pypi",
+      "name": "guardianshield",
+      "version": "1.0.0",
+      "command": "guardianshield-mcp"
+    },
+    "authors": ["sparkvibe-io"],
+    "tags": [
+      "security",
+      "mcp",
+      "code-scanning",
+      "pii-detection",
+      "prompt-injection",
+      "secrets",
+      "dependency-audit",
+      "osv",
+      "audit-logging",
+      "safety-profiles"
+    ],
+    "tools": 16,
+    "resources": 3,
+    "prompts": 2
+  }
+}

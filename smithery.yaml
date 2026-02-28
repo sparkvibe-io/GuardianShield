@@ -1,0 +1,33 @@
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      profile:
+        type: string
+        title: Safety Profile
+        description: Default safety profile to use
+        enum:
+          - general
+          - education
+          - healthcare
+          - finance
+          - children
+        default: general
+      auditPath:
+        type: string
+        title: Audit Database Path
+        description: Path to the SQLite audit database
+      debug:
+        type: boolean
+        title: Debug Logging
+        description: Enable debug-level logging
+        default: false
+  commandFunction: |-
+    (config) => {
+      const env = {};
+      if (config.profile) env.GUARDIANSHIELD_PROFILE = config.profile;
+      if (config.auditPath) env.GUARDIANSHIELD_AUDIT_PATH = config.auditPath;
+      if (config.debug) env.GUARDIANSHIELD_DEBUG = "1";
+      return { command: "uvx", args: ["guardianshield-mcp"], env };
+    }

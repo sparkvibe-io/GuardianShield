@@ -35,6 +35,9 @@ jobs:
       - name: Build site
         run: mkdocs build --strict
 
+      - name: Copy .well-known to site
+        run: cp -r docs/.well-known site/.well-known
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
