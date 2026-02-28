@@ -201,7 +201,7 @@ TOOLS: list[dict[str, Any]] = [
                 "scan_type": {
                     "type": "string",
                     "description": "Filter by scan type: code, input, output, secrets.",
-                    "enum": ["code", "input", "output", "secrets"],
+                    "enum": ["code", "input", "output", "secrets", "dependencies", "directory_dependencies"],
                 },
                 "limit": {
                     "type": "integer",
@@ -968,16 +968,22 @@ class GuardianShieldMCPServer:
         exclude = args.get("exclude")
 
         def _on_progress(fpath: str, done: int, total: int) -> None:
-            self._send_notification(
-                "guardianshield/scanProgress",
-                {"file": fpath, "done": done, "total": total},
-            )
+            try:
+                self._send_notification(
+                    "guardianshield/scanProgress",
+                    {"file": fpath, "done": done, "total": total},
+                )
+            except OSError:
+                pass  # Don't abort scan if notification write fails
 
         def _on_finding(f: Any) -> None:
-            self._send_notification(
-                "guardianshield/finding",
-                {"finding": f.to_dict()},
-            )
+            try:
+                self._send_notification(
+                    "guardianshield/finding",
+                    {"finding": f.to_dict()},
+                )
+            except OSError:
+                pass  # Don't abort scan if notification write fails
 
         try:
             findings = self._shield.scan_directory(

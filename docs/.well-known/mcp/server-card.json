@@ -87,7 +87,7 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "scan_type": { "type": "string", "description": "Filter by scan type: code, input, output, secrets.", "enum": ["code", "input", "output", "secrets"] },
+          "scan_type": { "type": "string", "description": "Filter by scan type.", "enum": ["code", "input", "output", "secrets", "dependencies", "directory_dependencies"] },
           "limit": { "type": "integer", "description": "Maximum number of entries to return (default 50).", "minimum": 1, "maximum": 500 }
         }
       }

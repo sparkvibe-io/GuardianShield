@@ -10,9 +10,11 @@ from __future__ import annotations
 
 import fnmatch
 import hashlib
+import logging
 import os
 from typing import Any, Callable, List, Optional
 
+from . import __version__
 from .audit import AuditLog
 from .config import ProjectConfig
 from .content import check_content
@@ -25,6 +27,9 @@ from .pii import check_pii
 from .profiles import SafetyProfile, load_profile, list_profiles
 from .scanner import scan_code as _scan_code
 from .secrets import check_secrets
+
+
+logger = logging.getLogger(__name__)
 
 
 class GuardianShield:
@@ -281,7 +286,8 @@ class GuardianShield:
                 on_progress(fpath, idx, total)
             try:
                 findings = self.scan_file(fpath)
-            except (OSError, UnicodeDecodeError):
+            except (OSError, UnicodeDecodeError) as exc:
+                logger.warning("Skipped file %s: %s", fpath, exc)
                 continue
             if on_finding:
                 for f in findings:
@@ -428,7 +434,8 @@ class GuardianShield:
                     with open(fpath, "r", encoding="utf-8", errors="replace") as fh:
                         content = fh.read()
                     deps = parse_manifest(content, fname)
-                except (OSError, ValueError):
+                except (OSError, ValueError) as exc:
+                    logger.warning("Skipped manifest %s: %s", fpath, exc)
                     continue
 
                 if deps:
@@ -440,7 +447,15 @@ class GuardianShield:
                             all_deps.append(dep)
 
         # Check collected dependencies for vulnerabilities.
-        findings = self.check_dependencies(all_deps) if all_deps else []
+        # Use _check_dependencies directly to avoid double audit logging
+        # (check_dependencies() logs under "dependencies", and we log below
+        # under "directory_dependencies").
+        if all_deps:
+            if self._osv_cache is None:
+                self._osv_cache = OsvCache()
+            findings = _check_dependencies(all_deps, cache=self._osv_cache)
+        else:
+            findings = []
 
         if on_finding:
             for f in findings:
@@ -499,7 +514,7 @@ class GuardianShield:
         """Return health / configuration information."""
         stats = self._audit.stats()
         result: dict[str, Any] = {
-            "version": "0.2.0",
+            "version": __version__,
             "profile": self._profile.name,
             "available_profiles": list_profiles(),
             "scanners": {

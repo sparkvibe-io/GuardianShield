@@ -258,9 +258,10 @@ def _parse_toml_array(text: str) -> List[str]:
 def _parse_toml(text: str) -> dict:
     """Parse TOML text, using stdlib on 3.11+ or fallback on 3.9/3.10."""
     if sys.version_info >= (3, 11):
+        import tomllib
         try:
             return _parse_toml_stdlib(text)
-        except Exception:
+        except tomllib.TOMLDecodeError:
             logger.debug("tomllib failed, trying fallback parser")
     return _parse_toml_fallback(text)
 
