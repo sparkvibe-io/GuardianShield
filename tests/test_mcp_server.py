@@ -335,7 +335,7 @@ class TestShieldStatus:
         ]
         responses = _capture_output(server, msgs)
         content = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert content["version"] == "1.0.0"
+        assert content["version"] == "1.0.1"
         assert content["profile"] == "general"
         assert "scanners" in content
         assert "capabilities" in content
@@ -757,7 +757,7 @@ class TestShieldStatusV2:
         ]
         responses = _capture_output(server, msgs)
         content = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert content["version"] == "1.0.0"
+        assert content["version"] == "1.0.1"
 
 
 # ---------------------------------------------------------------------------
@@ -993,7 +993,7 @@ class TestSyncVulnerabilities:
 class TestExports:
     def test_version_is_1_0(self):
         import guardianshield
-        assert guardianshield.__version__ == "1.0.0"
+        assert guardianshield.__version__ == "1.0.1"
 
     def test_v2_types_exported(self):
         from guardianshield import (
