@@ -1,5 +1,7 @@
 # GuardianShield
 
+<!-- mcp-name: io.github.sparkvibe-io/GuardianShield -->
+
 [![PyPI version](https://img.shields.io/pypi/v/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![Python](https://img.shields.io/pypi/pyversions/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![License](https://img.shields.io/github/license/sparkvibe-io/GuardianShield)](https://github.com/sparkvibe-io/GuardianShield/blob/main/LICENSE)

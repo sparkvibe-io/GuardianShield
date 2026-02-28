@@ -47,6 +47,9 @@ site/
 # Claude Code
 .claude/
 
+# MCP Registry tokens
+.mcpregistry_*
+
 # Local docs/notes
 GEMINI.md
 docs/Critique/
