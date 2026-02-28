@@ -1,10 +1,12 @@
 {
   "name": "guardianshield",
   "version": "1.0.2",
+  "displayName": "GuardianShield",
   "description": "Universal AI security layer — code scanning, PII detection, prompt injection defense, secret detection, dependency auditing, and audit logging.",
   "homepage": "https://github.com/sparkvibe-io/GuardianShield",
   "repository": "https://github.com/sparkvibe-io/GuardianShield",
   "documentation": "https://sparkvibe-io.github.io/GuardianShield/",
+  "icon": "https://raw.githubusercontent.com/sparkvibe-io/GuardianShield/main/docs/assets/logo.png",
   "license": "Apache-2.0",
   "runtime": "python",
   "transport": ["stdio"],
@@ -18,6 +20,12 @@
     {
       "name": "scan_code",
       "description": "Scan source code for security vulnerabilities (SQL injection, XSS, command injection, path traversal) and hardcoded secrets/credentials. Returns a list of findings with severity, type, and remediation guidance.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -31,6 +39,12 @@
     {
       "name": "scan_input",
       "description": "Check user or agent input for prompt injection attempts. Detects instruction override, role hijacking, system prompt extraction, delimiter abuse, ChatML injection, jailbreak keywords, and encoding evasion.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -42,6 +56,12 @@
     {
       "name": "scan_output",
       "description": "Check AI-generated output for PII leaks (email, SSN, credit card, phone, IP) and content policy violations (violence, self-harm, illegal activity). PII is automatically redacted in findings.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -53,6 +73,12 @@
     {
       "name": "check_secrets",
       "description": "Dedicated secret and credential detection. Scans text for AWS keys, GitHub tokens, Stripe keys, private keys, JWTs, Slack tokens, passwords, connection strings, Google API keys, and more. All matched secrets are redacted in findings.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -65,6 +91,12 @@
     {
       "name": "get_profile",
       "description": "Get the current safety profile configuration including scanner settings and blocked content categories.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -73,6 +105,12 @@
     {
       "name": "set_profile",
       "description": "Switch to a different safety profile. Available profiles: general, education, healthcare, finance, children. Each profile adjusts scanner sensitivity and blocked categories.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -84,6 +122,12 @@
     {
       "name": "audit_log",
       "description": "Query the security audit log. Returns recent scan events with timestamps, scan types, finding counts, and input hashes.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -95,6 +139,12 @@
     {
       "name": "get_findings",
       "description": "Retrieve past security findings from the audit database with optional filters by type, severity, or audit ID.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -108,6 +158,12 @@
     {
       "name": "shield_status",
       "description": "Get GuardianShield health and configuration status including active profile, enabled scanners, and audit statistics.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {}
@@ -116,6 +172,12 @@
     {
       "name": "scan_file",
       "description": "Scan a single source file for vulnerabilities and secrets. Auto-detects language from file extension. Returns findings with line numbers, severity, CWE IDs, and remediation.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -128,6 +190,12 @@
     {
       "name": "scan_directory",
       "description": "Recursively scan a directory for vulnerabilities and secrets. Supports extension filtering, exclude patterns, and reports progress. Returns all findings across all scanned files.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -141,6 +209,12 @@
     {
       "name": "test_pattern",
       "description": "Test a regex pattern against sample code. Returns match details including positions and matched text. Useful for developing and debugging custom vulnerability patterns.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -154,6 +228,12 @@
     {
       "name": "check_dependencies",
       "description": "Check package dependencies for known vulnerabilities using the OSV.dev database. Provide a list of packages with names, versions, and ecosystems (PyPI or npm).",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -162,9 +242,9 @@
             "items": {
               "type": "object",
               "properties": {
-                "name": { "type": "string" },
-                "version": { "type": "string" },
-                "ecosystem": { "type": "string", "enum": ["PyPI", "npm", "Go", "Packagist"], "default": "PyPI" }
+                "name": { "type": "string", "description": "Package name (e.g. 'requests', 'express')." },
+                "version": { "type": "string", "description": "Package version (e.g. '2.28.0', '4.18.2')." },
+                "ecosystem": { "type": "string", "description": "Package ecosystem.", "enum": ["PyPI", "npm", "Go", "Packagist"], "default": "PyPI" }
               },
               "required": ["name", "version"]
             },
@@ -177,6 +257,12 @@
     {
       "name": "sync_vulnerabilities",
       "description": "Sync the local OSV vulnerability database for a given ecosystem. Call this to update the cache before checking dependencies.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -189,6 +275,12 @@
     {
       "name": "parse_manifest",
       "description": "Parse a dependency manifest file into a structured list of dependencies. Auto-detects format from the filename. Supports: requirements.txt, package.json, pyproject.toml, package-lock.json, yarn.lock, pnpm-lock.yaml, Pipfile.lock, go.mod, go.sum, composer.json, composer.lock.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -201,6 +293,12 @@
     {
       "name": "scan_dependencies",
       "description": "Recursively scan a directory for manifest/lockfiles (requirements.txt, package.json, go.mod, composer.json, etc.), parse dependencies, and check them for known vulnerabilities using the OSV.dev database.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": true
+      },
       "inputSchema": {
         "type": "object",
         "properties": {
