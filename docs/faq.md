@@ -53,7 +53,7 @@ Common questions about GuardianShield — what it does, how it works, and how to
 
 ??? question "How accurate is the detection?"
 
-    GuardianShield uses **68 compiled regex patterns** across five scanners (code, secrets, injection, PII, and content). Detection accuracy depends on the scanner and the sensitivity level configured in your safety profile:
+    GuardianShield uses **108+ compiled regex patterns** across seven languages and five scanners (code, secrets, injection, PII, and content). Detection accuracy depends on the scanner and the sensitivity level configured in your safety profile:
 
     - **High sensitivity** — catches more potential issues but may produce more false positives
     - **Medium sensitivity** — balanced defaults suitable for everyday development

@@ -107,7 +107,7 @@ findings = shield.scan_directory("src/", extensions=[".py", ".js"])
 
 ## MCP Server Setup
 
-GuardianShield ships with a built-in MCP server (`guardianshield-mcp`) that exposes all 16 security tools to any compatible AI client. Pick your editor and follow the one-step setup:
+GuardianShield ships with a built-in MCP server (`guardianshield-mcp`) that exposes all 21 security tools to any compatible AI client. Pick your editor and follow the one-step setup:
 
 === "Claude Code"
 
