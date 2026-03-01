@@ -183,17 +183,13 @@ _SENSITIVITY_THRESHOLD: dict[str, int] = {
 }
 
 
-def _line_number_for_position(text: str, pos: int) -> int:
-    """Return the 1-based line number for a character position in *text*."""
-    return text[:pos].count("\n") + 1
-
-
-def _position_to_line_col(text: str, pos: int) -> tuple[int, int]:
-    """Convert absolute position to 0-based (line, col)."""
-    line = text[:pos].count("\n")
-    last_nl = text.rfind("\n", 0, pos)
+def _position_info(text: str, pos: int) -> tuple[int, int, int]:
+    """Return (1-based line_number, 0-based line, 0-based col) for a position."""
+    prefix = text[:pos]
+    line_0 = prefix.count("\n")
+    last_nl = prefix.rfind("\n")
     col = pos if last_nl == -1 else pos - last_nl - 1
-    return line, col
+    return line_0 + 1, line_0, col
 
 
 def check_injection(text: str, sensitivity: str = "medium") -> list[Finding]:
@@ -230,10 +226,8 @@ def check_injection(text: str, sensitivity: str = "medium") -> list[Finding]:
             if len(matched_text) > 100:
                 matched_text = matched_text[:100]
 
-            line_number = _line_number_for_position(text, match.start())
-
-            start_line, start_col = _position_to_line_col(text, match.start())
-            end_line, end_col = _position_to_line_col(text, match.end())
+            line_number, start_line, start_col = _position_info(text, match.start())
+            _, end_line, end_col = _position_info(text, match.end())
             range_obj = Range(
                 start_line=start_line,
                 start_col=start_col,

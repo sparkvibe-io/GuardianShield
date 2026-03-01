@@ -39,6 +39,12 @@ from .osv import Dependency
 logger = logging.getLogger("guardianshield.manifest")
 
 # ---------------------------------------------------------------------------
+# TOML fallback parser regexes (compiled once at module level)
+# ---------------------------------------------------------------------------
+_TOML_TABLE_RE = re.compile(r"^\[([^\[\]]+)\]\s*(?:#.*)?$")
+_TOML_KV_RE = re.compile(r"^([A-Za-z0-9_-]+)\s*=\s*(.+)$")
+
+# ---------------------------------------------------------------------------
 # requirements.txt parser
 # ---------------------------------------------------------------------------
 
@@ -189,7 +195,7 @@ def _parse_toml_fallback(text: str) -> dict:
             continue
 
         # Table header: [section] or [section.subsection]
-        table_match = re.match(r"^\[([^\[\]]+)\]\s*(?:#.*)?$", line)
+        table_match = _TOML_TABLE_RE.match(line)
         if table_match:
             path = [p.strip().strip('"').strip("'")
                     for p in table_match.group(1).split(".")]
@@ -202,7 +208,7 @@ def _parse_toml_fallback(text: str) -> dict:
             continue
 
         # Key = value
-        kv_match = re.match(r'^([A-Za-z0-9_-]+)\s*=\s*(.+)$', line)
+        kv_match = _TOML_KV_RE.match(line)
         if not kv_match:
             continue
 

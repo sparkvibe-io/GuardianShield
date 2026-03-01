@@ -40,6 +40,41 @@ _SEVERITY_ORDER = {
     Severity.INFO: 0,
 }
 
+# ---------------------------------------------------------------------------
+# Cached combined pattern lists (language -> COMMON + language-specific).
+# Built lazily on first use to avoid import-time issues.
+# ---------------------------------------------------------------------------
+_COMBINED_CACHE: dict[str, list] = {}
+
+
+def _get_patterns(language: str | None) -> list:
+    """Return the combined pattern list for a language, using a cache."""
+    key = language or "_default_"
+    cached = _COMBINED_CACHE.get(key)
+    if cached is not None:
+        return cached
+    if language and language in LANGUAGE_PATTERNS:
+        combined = COMMON_PATTERNS + LANGUAGE_PATTERNS[language]
+    else:
+        combined = COMMON_PATTERNS + PYTHON_PATTERNS
+    _COMBINED_CACHE[key] = combined
+    return combined
+
+
+# ---------------------------------------------------------------------------
+# Pre-built Remediation objects (pattern_name -> Remediation).
+# Built once at module level to avoid per-match dict lookup + construction.
+# ---------------------------------------------------------------------------
+_REMEDIATION_CACHE: dict[str, Remediation] = {}
+
+for _name, _data in REMEDIATION_MAP.items():
+    _REMEDIATION_CACHE[_name] = Remediation(
+        description=_data["description"],
+        before=_data.get("before", ""),
+        after=_data.get("after", ""),
+        auto_fixable=_data.get("auto_fixable", False),
+    )
+
 
 def _min_severity_for_sensitivity(sensitivity: str) -> int:
     """Return the minimum severity order value for a given sensitivity level."""
@@ -88,12 +123,12 @@ def scan_code(
         ext = os.path.splitext(file_path)[1].lower()
         resolved_lang = EXTENSION_MAP.get(ext)
 
-    # Build pattern list
-    if resolved_lang and resolved_lang in LANGUAGE_PATTERNS:
-        patterns = COMMON_PATTERNS + LANGUAGE_PATTERNS[resolved_lang]
-    else:
-        # Default: common + python (backward compatibility)
-        patterns = COMMON_PATTERNS + PYTHON_PATTERNS
+    # Get cached pattern list and pre-filter by severity.
+    all_patterns = _get_patterns(resolved_lang)
+    patterns = [
+        p for p in all_patterns
+        if _SEVERITY_ORDER[p[3]] >= min_sev
+    ]
 
     for line_number, line in enumerate(lines, start=1):
         # Skip comment lines
@@ -101,9 +136,6 @@ def scan_code(
             continue
 
         for name, pattern, finding_type, severity, description, confidence, cwe_ids in patterns:
-            if _SEVERITY_ORDER[severity] < min_sev:
-                continue
-
             match = pattern.search(line)
             if match:
                 range_obj = Range(
@@ -112,16 +144,6 @@ def scan_code(
                     end_line=line_number - 1,
                     end_col=match.end(),
                 )
-                # Attach remediation if available for this pattern.
-                remediation = None
-                rem_data = REMEDIATION_MAP.get(name)
-                if rem_data:
-                    remediation = Remediation(
-                        description=rem_data["description"],
-                        before=rem_data.get("before", ""),
-                        after=rem_data.get("after", ""),
-                        auto_fixable=rem_data.get("auto_fixable", False),
-                    )
                 findings.append(
                     Finding(
                         finding_type=finding_type,
@@ -135,7 +157,7 @@ def scan_code(
                         range=range_obj,
                         confidence=confidence,
                         cwe_ids=list(cwe_ids),
-                        remediation=remediation,
+                        remediation=_REMEDIATION_CACHE.get(name),
                     )
                 )
 

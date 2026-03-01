@@ -19,6 +19,7 @@ import logging
 import os
 import re
 import sqlite3
+import threading
 import time
 import urllib.error
 import urllib.request
@@ -33,6 +34,9 @@ from guardianshield.findings import (
 )
 
 logger = logging.getLogger("guardianshield.osv")
+
+# Compiled regex for extracting CVSS base score from vector strings.
+_CVSS_SCORE_RE = re.compile(r"(\d+(?:\.\d+))$")
 
 # ---------------------------------------------------------------------------
 # Version parsing and comparison (stdlib only, no external deps)
@@ -285,7 +289,8 @@ class OsvCache:
     def __init__(self, db_path: str | None = None) -> None:
         self._db_path = db_path or DEFAULT_CACHE_PATH
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
-        self._conn = sqlite3.connect(self._db_path)
+        self._lock = threading.Lock()
+        self._conn = sqlite3.connect(self._db_path, check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
         self._create_tables()
 
@@ -454,8 +459,7 @@ class OsvCache:
                             # CVSS vector string (e.g. "CVSS:3.1/AV:N/...").
                             # Extract base score from the vector's trailing
                             # numeric segment if present, otherwise skip.
-                            import re as _re
-                            m = _re.search(r"(\d+(?:\.\d+))$", score_str)
+                            m = _CVSS_SCORE_RE.search(score_str)
                             if m:
                                 scores_by_type[sev_type] = float(m.group(1))
                             else:
