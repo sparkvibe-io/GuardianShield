@@ -30,7 +30,7 @@ from guardianshield import (
     ScannerConfig,
 )
 
-# v0.2 additions
+# Config, dedup, and dependency scanning
 from guardianshield.config import ProjectConfig, discover_config
 from guardianshield.dedup import FindingDeduplicator, DedupResult
 from guardianshield.osv import Dependency, OsvCache, check_dependencies

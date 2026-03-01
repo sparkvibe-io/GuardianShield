@@ -500,6 +500,40 @@ Recursively scan a directory for manifest and lockfiles, parse dependencies, and
 
 ---
 
+## Supported Languages
+
+GuardianShield's code scanner uses language-specific pattern sets to detect vulnerabilities. Language is auto-detected from file extension via `EXTENSION_MAP`, or can be specified explicitly with the `language` parameter.
+
+### Currently Supported
+
+| Language | File Extensions | Patterns | Coverage |
+|---|---|---|---|
+| **Python** | `.py` | 15 patterns | SQL injection (4), XSS (3), command injection (3), path traversal (2), insecure functions (3) |
+| **JavaScript / TypeScript** | `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs` | 7 patterns | Dynamic code generation, shell execution, unsafe HTML rendering, dynamic require, template SQL injection, prototype pollution, DOM insertion |
+| **Cross-language** | *(all files)* | 3 patterns | Unsafe DOM assignment, unsafe DOM output, dynamic code execution |
+
+**Total code patterns:** 25 (15 Python + 7 JS/TS + 3 cross-language)
+
+!!! info "All scanners work on any text"
+    The language-specific patterns above apply only to the **code scanner** (`scan_code`, `scan_file`, `scan_directory`). The other scanners -- secret detection (12 patterns), prompt injection (9 patterns), PII detection (7 patterns), and content moderation (15 patterns) -- work on any text regardless of programming language.
+
+### Request Language Support
+
+Want GuardianShield to support your language? We welcome contributions and requests for:
+
+- Go
+- Java
+- Ruby
+- PHP
+- C#
+- Rust
+- Kotlin
+- Swift
+
+[Request Language Support :material-arrow-right:](https://github.com/sparkvibe-io/GuardianShield/issues/new?title=Language+Support+Request&labels=enhancement){ .md-button }
+
+---
+
 ## Resources
 
 GuardianShield exposes 3 MCP resources. Resources provide read-only data that AI clients can fetch at any time.
@@ -607,7 +641,7 @@ The client sends `initialize` to negotiate capabilities, then confirms with `ini
     },
     "serverInfo": {
       "name": "guardianshield",
-      "version": "0.2.0"
+      "version": "1.0.2"
     }
   }
 }

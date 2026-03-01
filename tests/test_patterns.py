@@ -433,7 +433,7 @@ class TestLanguageAutoDetection:
 
     def test_unknown_extension_falls_back_to_python(self):
         code = "os.system('ls')"
-        findings = scan_code(code, sensitivity="high", file_path="script.rb")
+        findings = scan_code(code, sensitivity="high", file_path="script.xyz")
         names = [f.metadata["pattern_name"] for f in findings]
         assert "command_injection_os_system" in names
 

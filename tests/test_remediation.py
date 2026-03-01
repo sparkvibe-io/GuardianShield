@@ -3,8 +3,13 @@
 from guardianshield.findings import Finding, Remediation
 from guardianshield.patterns import REMEDIATION_MAP
 from guardianshield.patterns.common import COMMON_REMEDIATION
+from guardianshield.patterns.csharp import CSHARP_REMEDIATION
+from guardianshield.patterns.go import GO_REMEDIATION
+from guardianshield.patterns.java import JAVA_REMEDIATION
 from guardianshield.patterns.javascript import JAVASCRIPT_REMEDIATION
+from guardianshield.patterns.php import PHP_REMEDIATION
 from guardianshield.patterns.python import PYTHON_REMEDIATION
+from guardianshield.patterns.ruby import RUBY_REMEDIATION
 from guardianshield.scanner import scan_code
 
 # -- Remediation map coverage ------------------------------------------------
@@ -38,7 +43,11 @@ def test_javascript_remediation_has_all_js_patterns():
 
 
 def test_combined_remediation_map_has_all():
-    total = len(COMMON_REMEDIATION) + len(PYTHON_REMEDIATION) + len(JAVASCRIPT_REMEDIATION)
+    total = (
+        len(COMMON_REMEDIATION) + len(PYTHON_REMEDIATION) + len(JAVASCRIPT_REMEDIATION)
+        + len(GO_REMEDIATION) + len(JAVA_REMEDIATION) + len(RUBY_REMEDIATION)
+        + len(PHP_REMEDIATION) + len(CSHARP_REMEDIATION)
+    )
     assert len(REMEDIATION_MAP) == total
 
 
