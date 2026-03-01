@@ -164,7 +164,7 @@ GuardianShield includes five independent scanners. Each can be enabled or disabl
 
 **Profile key:** `code_scanner`
 
-Analyzes source code for common vulnerability patterns using 75+ language-aware rules. The scanner auto-detects language from file extension and loads the appropriate pattern set: Python (15 patterns), JavaScript/TypeScript (7 patterns), plus 3 cross-language patterns. Every finding includes CWE IDs and remediation suggestions with before/after code examples.
+Analyzes source code for common vulnerability patterns using 25 language-aware rules. The scanner auto-detects language from file extension and loads the appropriate pattern set: Python (15 patterns), JavaScript/TypeScript (7 patterns), plus 3 cross-language patterns. Every finding includes CWE IDs and remediation suggestions with before/after code examples.
 
 | Detection | Examples |
 |---|---|
