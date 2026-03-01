@@ -158,7 +158,7 @@ def test_get_findings_filter(shield):
 
 def test_status(shield):
     s = shield.status()
-    assert s["version"] == "1.0.2"
+    assert s["version"] == "1.1.0b1"
     assert s["profile"] == "general"
     assert "general" in s["available_profiles"]
     assert s["scanners"]["code_scanner"] is True
