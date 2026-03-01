@@ -61,7 +61,7 @@ MCP_PROTOCOL_VERSION = "2024-11-05"
 
 SERVER_INFO = {
     "name": "guardianshield",
-    "version": "1.0.2",
+    "version": "1.1.0b1",
 }
 
 # ---------------------------------------------------------------------------
