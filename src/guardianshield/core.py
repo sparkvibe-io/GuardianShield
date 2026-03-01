@@ -81,15 +81,28 @@ class GuardianShield:
         text: str,
         findings: list[Finding],
         metadata: dict[str, Any] | None = None,
-    ) -> None:
-        """Persist a scan event to the audit log."""
-        self._audit.log_scan(
-            scan_type=scan_type,
-            profile=self._profile.name,
-            input_hash=self._hash_input(text),
-            findings=findings,
-            metadata=metadata,
-        )
+    ) -> int | None:
+        """Persist a scan event to the audit log.
+
+        Returns the ``audit_log.id`` on success, or ``None`` if logging
+        failed.  Scan results are never discarded due to an audit failure.
+        """
+        try:
+            return self._audit.log_scan(
+                scan_type=scan_type,
+                profile=self._profile.name,
+                input_hash=self._hash_input(text),
+                findings=findings,
+                metadata=metadata,
+            )
+        except Exception:
+            logger.warning(
+                "Audit logging failed for scan_type=%s; "
+                "scan results are still returned.",
+                scan_type,
+                exc_info=True,
+            )
+            return None
 
     def _annotate_fps(self, findings: list[Finding]) -> list[Finding]:
         """Annotate findings with false positive info if feedback DB is available."""
@@ -459,7 +472,7 @@ class GuardianShield:
         path: str,
         exclude: list[str] | None = None,
         on_finding: Callable[[Finding], None] | None = None,
-    ) -> list[Finding]:
+    ) -> tuple[list[Finding], dict[str, Any]]:
         """Walk a directory tree, detect manifest files, and scan dependencies.
 
         Args:
@@ -468,7 +481,8 @@ class GuardianShield:
             on_finding: Optional callback invoked for each Finding.
 
         Returns:
-            A list of :class:`Finding` instances for vulnerable dependencies.
+            A tuple of ``(findings, metadata)`` where *metadata* contains
+            ``manifests_found`` and ``dependency_count``.
         """
         path = os.path.abspath(path)
         if not os.path.isdir(path):
@@ -543,7 +557,7 @@ class GuardianShield:
         }
         self._log("directory_dependencies", dep_text, findings, metadata)
 
-        return findings
+        return findings, metadata
 
     @property
     def osv_cache(self) -> OsvCache:

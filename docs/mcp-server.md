@@ -251,16 +251,16 @@ Get the current safety profile configuration and active rules.
 
 Switch the active safety profile. Profiles adjust scanner sensitivity and enabled rules for specific industries and use cases.
 
-| Parameter      | Type     | Required | Description                                                          |
-|----------------|----------|----------|----------------------------------------------------------------------|
-| `profile_name` | `string` | Yes      | Profile to activate: `general`, `education`, `healthcare`, `finance`, or `children` |
+| Parameter | Type     | Required | Description                                                          |
+|-----------|----------|----------|----------------------------------------------------------------------|
+| `name`    | `string` | Yes      | Profile to activate: `general`, `education`, `healthcare`, `finance`, or `children` |
 
 !!! example "Example call"
     ```json
     {
       "name": "set_profile",
       "arguments": {
-        "profile_name": "healthcare"
+        "name": "healthcare"
       }
     }
     ```
@@ -276,8 +276,7 @@ Query the audit log of all scans, findings, and security events.
 | Parameter      | Type     | Required | Description                                           |
 |----------------|----------|----------|-------------------------------------------------------|
 | `limit`        | `integer`| No       | Maximum number of entries to return (default: 50)     |
-| `scan_type`    | `string` | No       | Filter by scan type (`code`, `input`, `output`, `secrets`) |
-| `min_severity` | `string` | No       | Minimum severity: `low`, `medium`, `high`, `critical` |
+| `scan_type`    | `string` | No       | Filter by scan type (`code`, `input`, `output`, `secrets`, `dependencies`, `directory_dependencies`) |
 
 **Returns:** List of audit log entries with timestamps, scan types, results, and finding summaries.
 

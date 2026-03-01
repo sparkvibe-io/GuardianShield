@@ -82,8 +82,7 @@ The `audit_log` tool returns recent scan entries with optional filtering.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `limit` | `integer` | `50` | Maximum number of entries to return |
-| `scan_type` | `string` | — | Filter by scan type: `code`, `input`, or `output` |
-| `min_severity` | `string` | — | Only return scans with `max_severity` at or above this level |
+| `scan_type` | `string` | — | Filter by scan type: `code`, `input`, `output`, `secrets`, `dependencies`, `directory_dependencies` |
 
 **Example MCP response:**
 
@@ -115,9 +114,6 @@ entries = shield.get_audit_log(limit=10)
 
 # Filter by scan type
 code_scans = shield.get_audit_log(limit=10, scan_type="code")
-
-# Filter by minimum severity
-critical_scans = shield.get_audit_log(min_severity="critical")
 
 for entry in entries:
     print(f"[{entry['timestamp']}] {entry['scan_type']} — "

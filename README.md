@@ -5,11 +5,11 @@
 [![PyPI version](https://img.shields.io/pypi/v/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![Python](https://img.shields.io/pypi/pyversions/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![License](https://img.shields.io/github/license/sparkvibe-io/GuardianShield)](https://github.com/sparkvibe-io/GuardianShield/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-934%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1396%20passing-brightgreen)]()
 
 Universal AI security layer — an open-source MCP server for code scanning, PII detection, prompt injection defense, secret detection, dependency auditing, and audit logging.
 
-**Zero dependencies** · **16 MCP tools** · **5 safety profiles** · **75+ detection patterns**
+**Zero dependencies** · **21 MCP tools** · **5 safety profiles** · **108+ detection patterns**
 
 ## Features
 
@@ -75,6 +75,21 @@ claude mcp add guardianshield -- guardianshield-mcp
 | `sync_vulnerabilities` | Sync the local OSV vulnerability database |
 | `parse_manifest` | Parse any supported manifest file (11 formats) into dependency objects |
 | `scan_dependencies` | Scan a directory for manifest files and check all deps for vulnerabilities |
+
+### False Positive Management
+
+| Tool | Description |
+|------|-------------|
+| `mark_false_positive` | Mark a finding as false positive (flags future matches) |
+| `list_false_positives` | List active false positive records with optional filter |
+| `unmark_false_positive` | Remove a false positive record by fingerprint |
+
+### Engine Management
+
+| Tool | Description |
+|------|-------------|
+| `list_engines` | List available analysis engines with capabilities |
+| `set_engine` | Set active analysis engines for code scanning |
 
 ### Configuration & Utilities
 

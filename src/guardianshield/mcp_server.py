@@ -730,9 +730,12 @@ class GuardianShieldMCPServer:
 
         try:
             result = handler(params)
-        except Exception:
+        except Exception as exc:
             logger.exception("Error handling %s", method)
-            self._send_error(msg_id, -32603, "Internal server error.")
+            self._send_error(
+                msg_id, -32603,
+                f"Internal server error: [{type(exc).__name__}] {exc}",
+            )
             return
 
         if msg_id is not None:
@@ -796,9 +799,11 @@ class GuardianShieldMCPServer:
 
         try:
             return handler(arguments)
-        except Exception:
+        except Exception as exc:
             logger.exception("Tool %s raised an exception", tool_name)
-            return self._tool_error(f"Tool '{tool_name}' encountered an error.")
+            return self._tool_error(
+                f"Tool '{tool_name}' failed: [{type(exc).__name__}] {exc}"
+            )
 
     # ------------------------------------------------------------------
     # Resource handlers
@@ -1239,28 +1244,16 @@ class GuardianShieldMCPServer:
         exclude = args.get("exclude")
 
         try:
-            findings = self._shield.scan_dependencies_in_directory(
+            findings, meta = self._shield.scan_dependencies_in_directory(
                 path, exclude=exclude,
             )
         except NotADirectoryError:
             return self._tool_error(f"Not a directory: {path}")
 
-        # Retrieve the manifests_found info from audit log metadata.
-        log = self._shield.get_audit_log(scan_type="directory_dependencies", limit=1)
-        manifests_found: list[str] = []
-        dependency_count = 0
-        if log:
-            try:
-                meta = json.loads(log[0].get("metadata", "{}"))
-                manifests_found = meta.get("manifests_found", [])
-                dependency_count = meta.get("dependency_count", 0)
-            except (ValueError, TypeError):
-                pass
-
         result = {
             "directory": path,
-            "manifests_found": manifests_found,
-            "dependency_count": dependency_count,
+            "manifests_found": meta.get("manifests_found", []),
+            "dependency_count": meta.get("dependency_count", 0),
             "finding_count": len(findings),
             "findings": [f.to_dict() for f in self._maybe_redact(findings)],
         }
