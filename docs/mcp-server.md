@@ -5,7 +5,7 @@ description: Set up GuardianShield MCP server with Claude Code, VS Code, Cursor,
 
 # MCP Server Setup
 
-GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **16 tools**, **3 resources**, and **2 prompts** that any MCP-compatible AI client can discover and invoke automatically.
+GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **21 tools**, **3 resources**, and **2 prompts** that any MCP-compatible AI client can discover and invoke automatically.
 
 !!! info "What is MCP?"
     The [Model Context Protocol](https://modelcontextprotocol.io/) is an open standard that lets AI assistants discover and call external tools over a simple JSON-RPC transport. GuardianShield uses the **stdio** transport — the AI editor launches the server process and communicates through stdin/stdout.
@@ -72,7 +72,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Reload the window after saving. The Copilot agent will discover all 16 tools automatically.
+    Reload the window after saving. The Copilot agent will discover all 21 tools automatically.
 
 === "Cursor"
 
@@ -123,7 +123,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Restart Claude Desktop. The 16 tools, 3 resources, and 2 prompts will be available in the conversation.
+    Restart Claude Desktop. The 21 tools, 3 resources, and 2 prompts will be available in the conversation.
 
 === "Generic MCP Client"
 
@@ -140,7 +140,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
 
 ## Tools Reference
 
-GuardianShield exposes 16 MCP tools. Each tool accepts a JSON object of parameters and returns a structured result.
+GuardianShield exposes 21 MCP tools. Each tool accepts a JSON object of parameters and returns a structured result.
 
 ### `scan_code`
 
@@ -148,9 +148,10 @@ Scan source code for security vulnerabilities, insecure patterns, and embedded s
 
 | Parameter   | Type     | Required | Description                                      |
 |-------------|----------|----------|--------------------------------------------------|
-| `code`      | `string` | Yes      | The source code to scan                          |
-| `file_path` | `string` | No       | File path for context (improves language detection) |
-| `language`  | `string` | No       | Programming language (`python`, `javascript`, etc.) |
+| `code`      | `string`   | Yes      | The source code to scan                          |
+| `file_path` | `string`   | No       | File path for context (improves language detection) |
+| `language`  | `string`   | No       | Programming language (`python`, `javascript`, etc.) |
+| `engines`   | `string[]` | No       | Analysis engines to use (default: profile setting). See [Engine Management](#list_engines). |
 
 !!! example "Example call"
     ```json
@@ -500,6 +501,97 @@ Recursively scan a directory for manifest and lockfiles, parse dependencies, and
 
 ---
 
+### `mark_false_positive`
+
+Mark a security finding as a false positive. The finding will be flagged in future scans, and similar patterns at other locations will be annotated as potential false positives.
+
+| Parameter | Type     | Required | Description                                         |
+|-----------|----------|----------|-----------------------------------------------------|
+| `finding` | `object` | Yes      | The finding dict as returned by a scan tool         |
+| `reason`  | `string` | No       | Explanation of why this is a false positive         |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "mark_false_positive",
+      "arguments": {
+        "finding": {"finding_type": "secret", "severity": "high", "message": "...", "matched_text": "..."},
+        "reason": "Test fixture, not a real secret"
+      }
+    }
+    ```
+
+**Returns:** Confirmation with the false positive record ID and fingerprint.
+
+---
+
+### `list_false_positives`
+
+List active false positive records with optional filtering by scanner.
+
+| Parameter | Type      | Required | Description                                            |
+|-----------|-----------|----------|--------------------------------------------------------|
+| `scanner` | `string`  | No       | Filter by scanner name (e.g. `code_scanner`, `secrets`) |
+| `limit`   | `integer` | No       | Maximum records to return (default: 100)               |
+
+**Returns:** List of false positive records with fingerprints, reasons, and timestamps.
+
+---
+
+### `unmark_false_positive`
+
+Remove a false positive record by its fingerprint. The finding will no longer be suppressed in future scans.
+
+| Parameter     | Type     | Required | Description                                    |
+|---------------|----------|----------|------------------------------------------------|
+| `fingerprint` | `string` | Yes      | The fingerprint of the false positive to remove |
+
+**Returns:** Confirmation of whether the record was removed.
+
+---
+
+### `list_engines`
+
+List available analysis engines with their capabilities and enabled status. Engines are pluggable analysis strategies — the default `regex` engine uses pattern matching.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| *(none)*  | --   | --       | No parameters required |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "list_engines",
+      "arguments": {}
+    }
+    ```
+
+**Returns:** List of engines with name, enabled status, and capabilities (analysis type, supported languages, speed, feature flags).
+
+---
+
+### `set_engine`
+
+Set which analysis engines are active for code scanning in the current session. This is session-scoped and does not persist to disk.
+
+| Parameter | Type       | Required | Description                          |
+|-----------|------------|----------|--------------------------------------|
+| `engines` | `string[]` | Yes      | List of engine names to enable       |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "set_engine",
+      "arguments": {
+        "engines": ["regex"]
+      }
+    }
+    ```
+
+**Returns:** Confirmation with the updated list of enabled engines.
+
+---
+
 ## Supported Languages
 
 GuardianShield's code scanner uses language-specific pattern sets to detect vulnerabilities. Language is auto-detected from file extension via `EXTENSION_MAP`, or can be specified explicitly with the `language` parameter.
@@ -508,11 +600,16 @@ GuardianShield's code scanner uses language-specific pattern sets to detect vuln
 
 | Language | File Extensions | Patterns | Coverage |
 |---|---|---|---|
-| **Python** | `.py` | 15 patterns | SQL injection (4), XSS (3), command injection (3), path traversal (2), insecure functions (3) |
-| **JavaScript / TypeScript** | `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs` | 7 patterns | Dynamic code generation, shell execution, unsafe HTML rendering, dynamic require, template SQL injection, prototype pollution, DOM insertion |
+| **Python** | `.py`, `.pyw` | 15 patterns | SQL injection, XSS, command injection, path traversal, insecure functions |
+| **JavaScript / TypeScript** | `.js`, `.ts`, `.jsx`, `.tsx`, `.mjs`, `.cjs` | 7 patterns | Dynamic code generation, shell execution, unsafe HTML, template SQL injection, prototype pollution |
+| **Go** | `.go` | 13 patterns | SQL injection, command injection, path traversal, template injection, insecure TLS |
+| **Java** | `.java` | 12 patterns | SQL injection, XSS, command injection, deserialization, path traversal, XXE |
+| **Ruby** | `.rb`, `.rake`, `.gemspec` | 16 patterns | SQL injection, XSS, command injection, mass assignment, open redirect |
+| **PHP** | `.php` | 20 patterns | SQL injection, XSS, command injection, file inclusion, deserialization |
+| **C# / ASP.NET** | `.cs` | 22 patterns | SQL injection, XSS, command injection, path traversal, deserialization, LDAP injection |
 | **Cross-language** | *(all files)* | 3 patterns | Unsafe DOM assignment, unsafe DOM output, dynamic code execution |
 
-**Total code patterns:** 25 (15 Python + 7 JS/TS + 3 cross-language)
+**Total code patterns:** 108 (15 Python + 7 JS/TS + 13 Go + 12 Java + 16 Ruby + 20 PHP + 22 C# + 3 cross-language)
 
 !!! info "All scanners work on any text"
     The language-specific patterns above apply only to the **code scanner** (`scan_code`, `scan_file`, `scan_directory`). The other scanners -- secret detection (12 patterns), prompt injection (9 patterns), PII detection (7 patterns), and content moderation (15 patterns) -- work on any text regardless of programming language.
@@ -521,11 +618,6 @@ GuardianShield's code scanner uses language-specific pattern sets to detect vuln
 
 Want GuardianShield to support your language? We welcome contributions and requests for:
 
-- Go
-- Java
-- Ruby
-- PHP
-- C#
 - Rust
 - Kotlin
 - Swift
