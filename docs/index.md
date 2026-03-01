@@ -46,7 +46,7 @@ code scanning, PII detection, prompt injection defense, secret detection, and au
     <span class="stat-label">Safety Profiles</span>
   </div>
   <div class="stat-card">
-    <span class="stat-number">68</span>
+    <span class="stat-number">108</span>
     <span class="stat-label">Detection Patterns</span>
   </div>
   <div class="stat-card">
@@ -115,7 +115,7 @@ GuardianShield sits between your AI agent and your codebase, scanning every inte
   </div>
   <div class="shield-card">
     <h4><span class="material-symbols-rounded ms-green">code</span> Language-Aware</h4>
-    <p>68 patterns across 5 scanners (code, secrets, injection, PII, content) with CWE mapping — auto-detected from file extension.</p>
+    <p>108+ patterns across 7 languages (Python, JS/TS, Go, Java, Ruby, PHP, C#) with CWE mapping — auto-detected from file extension.</p>
   </div>
 </div>
 
