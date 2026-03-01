@@ -140,6 +140,7 @@ class Finding:
     confidence: float | None = None
     cwe_ids: list[str] = field(default_factory=list)
     remediation: Remediation | None = None
+    details: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict.
@@ -167,6 +168,8 @@ class Finding:
             d["cwe_ids"] = list(self.cwe_ids)
         if self.remediation is not None:
             d["remediation"] = self.remediation.to_dict()
+        if self.details:
+            d["details"] = self.details
         return d
 
     def to_json(self) -> str:
@@ -196,5 +199,9 @@ class Finding:
         # Ensure list default for cwe_ids.
         if "cwe_ids" not in data:
             data["cwe_ids"] = []
+
+        # Ensure dict default for details.
+        if "details" not in data:
+            data["details"] = {}
 
         return cls(**data)

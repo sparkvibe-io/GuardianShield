@@ -1,9 +1,9 @@
 # GuardianShield — AI Agent Instructions
 
 GuardianShield is a universal AI security layer exposed as an MCP server.
-**Version**: 1.0.2 | **Tests**: 934 | **Dependencies**: zero (stdlib only)
+**Version**: 1.0.2 | **Tests**: 1362 | **Dependencies**: zero (stdlib only)
 
-## Available MCP Tools (16)
+## Available MCP Tools (19)
 
 ### Scanning
 - **scan_code**: Scan source code for vulnerabilities and hardcoded secrets (Python + JS/TS)
@@ -17,13 +17,18 @@ GuardianShield is a universal AI security layer exposed as an MCP server.
 - **parse_manifest**: Parse any supported manifest file (11 formats) into dependency objects
 - **scan_dependencies**: Scan a directory for manifest files and check all dependencies for vulnerabilities
 
+### False Positive Feedback
+- **mark_false_positive**: Mark a finding as false positive (flags future matches, annotates similar patterns)
+- **list_false_positives**: List active false positive records with optional scanner filter
+- **unmark_false_positive**: Remove a false positive record by fingerprint
+
 ### Configuration & Utilities
 - **get_profile**: View current safety profile
 - **set_profile**: Switch safety profiles (general/education/healthcare/finance/children)
 - **test_pattern**: Test a regex pattern against sample code (returns matches with positions)
 - **audit_log**: Query the security audit log
 - **get_findings**: Retrieve past findings with filters
-- **shield_status**: Get health, capabilities, OSV cache stats, and configuration
+- **shield_status**: Get health, capabilities, OSV cache stats, FP stats, and configuration
 
 ## Usage Guidelines
 
@@ -37,6 +42,8 @@ GuardianShield is a universal AI security layer exposed as an MCP server.
 8. Use `scan_dependencies` to audit all manifests in a directory at once
 9. Use `test_pattern` to develop and debug custom vulnerability regex patterns
 10. Switch profiles with `set_profile` based on the domain context
+11. Use `mark_false_positive` to flag known false positives; similar patterns get auto-annotated
+12. Use `list_false_positives` and `unmark_false_positive` to manage false positive records
 
 ## Project Structure
 
@@ -55,17 +62,21 @@ src/guardianshield/
 ├── pii.py           # PII detection (regex + optional Presidio)
 ├── content.py       # Content moderation (heuristic patterns)
 ├── config.py        # Project config discovery (.guardianshield.yaml/.json)
+├── enrichment.py    # Finding enrichment (code context, explanations, CWE/OWASP references)
+├── feedback.py      # False positive feedback loop (per-project SQLite store)
 ├── dedup.py         # Finding deduplication via SHA-256 fingerprinting
 ├── osv.py           # OSV.dev local-first dependency scanner (PyPI, npm, Go, Packagist)
 ├── manifest.py      # Manifest file parser (11 formats, 4 ecosystems)
 ├── audit.py         # SQLite audit log
 ├── core.py          # GuardianShield orchestrator (scan_file, scan_directory, scan_dependencies_in_directory)
-└── mcp_server.py    # MCP server (16 tools, 3 resources, 2 prompts)
+└── mcp_server.py    # MCP server (19 tools, 3 resources, 2 prompts)
 ```
 
 ## Key Concepts
 
-- **Finding fields**: All findings include `range` (LSP format), `confidence` (0.0–1.0), `cwe_ids`, and optional `remediation` (description + before/after code + auto_fixable)
+- **Finding fields**: All findings include `range` (LSP format), `confidence` (0.0–1.0), `cwe_ids`, optional `remediation`, and `details` (enriched context)
+- **Enriched details**: Every finding includes `details` dict with code context (surrounding lines), match explanation, CWE/OWASP references, and scanner metadata
+- **False positive feedback**: `FalsePositiveDB` stores per-project FP records; findings are auto-annotated with `false_positive` or `potential_false_positive` metadata
 - **Language detection**: `scan_file` and `scan_code` auto-detect language from file extension via `EXTENSION_MAP`
 - **Deduplication**: `FindingDeduplicator` tracks fingerprints across scans, returns delta (new/unchanged/removed)
 - **Project config**: Place `.guardianshield.json` or `.guardianshield.yaml` in project root for profile, severity overrides, and exclude paths
@@ -79,7 +90,7 @@ src/guardianshield/
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 934 tests
+pytest tests/ -v          # 1362 tests
 ruff check src/ tests/    # Linting
 ```
 

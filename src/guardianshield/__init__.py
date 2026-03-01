@@ -24,6 +24,8 @@ __version__ = "1.0.2"
 from .config import ProjectConfig, discover_config
 from .core import GuardianShield
 from .dedup import DedupResult, FindingDeduplicator
+from .enrichment import enrich_finding
+from .feedback import FalsePositiveDB
 from .findings import Finding, FindingType, Range, Remediation, Severity
 from .manifest import (
     parse_composer_json,
@@ -47,6 +49,7 @@ __all__ = [
     "__version__",
     "DedupResult",
     "Dependency",
+    "FalsePositiveDB",
     "Finding",
     "FindingDeduplicator",
     "FindingType",
@@ -59,6 +62,7 @@ __all__ = [
     "SafetyProfile",
     "ScannerConfig",
     "Severity",
+    "enrich_finding",
     "check_dependencies",
     "discover_config",
     "parse_composer_json",

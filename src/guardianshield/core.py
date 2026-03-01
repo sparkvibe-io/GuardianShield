@@ -18,6 +18,7 @@ from . import __version__
 from .audit import AuditLog
 from .config import ProjectConfig
 from .content import check_content
+from .feedback import FalsePositiveDB
 from .findings import Finding
 from .injection import check_injection
 from .manifest import parse_manifest
@@ -47,6 +48,7 @@ class GuardianShield:
         audit_path: str | None = None,
         project_config: ProjectConfig | None = None,
         osv_cache: OsvCache | None = None,
+        feedback_db: FalsePositiveDB | None = None,
     ) -> None:
         # If project_config specifies a profile, use it (but explicit
         # profile arg takes precedence over config file).
@@ -56,6 +58,7 @@ class GuardianShield:
         self._audit = AuditLog(db_path=audit_path)
         self._project_config = project_config
         self._osv_cache = osv_cache
+        self._feedback_db = feedback_db
 
     # ------------------------------------------------------------------
     # Helpers
@@ -85,6 +88,12 @@ class GuardianShield:
             findings=findings,
             metadata=metadata,
         )
+
+    def _annotate_fps(self, findings: list[Finding]) -> list[Finding]:
+        """Annotate findings with false positive info if feedback DB is available."""
+        if self._feedback_db is None:
+            self._feedback_db = FalsePositiveDB()
+        return self._feedback_db.annotate(findings)
 
     # ------------------------------------------------------------------
     # Profile management
@@ -152,6 +161,7 @@ class GuardianShield:
                 )
             )
 
+        self._annotate_fps(findings)
         self._log("code", code, findings, {"file_path": file_path})
         return findings
 
@@ -165,6 +175,7 @@ class GuardianShield:
                 check_injection(text, sensitivity=cfg.sensitivity)
             )
 
+        self._annotate_fps(findings)
         self._log("input", text, findings)
         return findings
 
@@ -188,6 +199,7 @@ class GuardianShield:
                 )
             )
 
+        self._annotate_fps(findings)
         self._log("output", text, findings)
         return findings
 
@@ -314,6 +326,7 @@ class GuardianShield:
                 )
             )
 
+        self._annotate_fps(findings)
         self._log("secrets", text, findings, {"file_path": file_path})
         return findings
 
@@ -343,6 +356,8 @@ class GuardianShield:
             cache=self._osv_cache,
             auto_sync=auto_sync,
         )
+
+        self._annotate_fps(findings)
 
         # Build a stable, hashable representation for the audit log.
         dep_text = ";".join(
@@ -457,6 +472,8 @@ class GuardianShield:
         else:
             findings = []
 
+        self._annotate_fps(findings)
+
         if on_finding:
             for f in findings:
                 on_finding(f)
@@ -479,6 +496,70 @@ class GuardianShield:
         if self._osv_cache is None:
             self._osv_cache = OsvCache()
         return self._osv_cache
+
+    # ------------------------------------------------------------------
+    # False positive feedback
+    # ------------------------------------------------------------------
+
+    @property
+    def feedback_db(self) -> FalsePositiveDB:
+        """Return the shared :class:`FalsePositiveDB` instance."""
+        if self._feedback_db is None:
+            self._feedback_db = FalsePositiveDB()
+        return self._feedback_db
+
+    def mark_false_positive(
+        self,
+        finding_dict: dict[str, Any],
+        reason: str = "",
+    ) -> dict[str, Any]:
+        """Mark a finding as false positive.
+
+        Args:
+            finding_dict: The finding dict as returned by a scan tool.
+            reason: Optional user explanation.
+
+        Returns:
+            A dict with ``id``, ``fingerprint``, and ``message``.
+        """
+        from .findings import Finding as _Finding
+
+        finding = _Finding.from_dict(finding_dict)
+        record_id = self.feedback_db.mark(finding, reason=reason)
+
+        from .feedback import _fingerprint
+        fp = _fingerprint(finding)
+
+        return {
+            "id": record_id,
+            "fingerprint": fp,
+            "message": f"Finding marked as false positive (id={record_id}).",
+        }
+
+    def list_false_positives(
+        self,
+        scanner: str | None = None,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        """List active false positive records."""
+        return self.feedback_db.list_fps(scanner=scanner, limit=limit)
+
+    def unmark_false_positive(self, fingerprint: str) -> dict[str, Any]:
+        """Remove a false positive record by fingerprint.
+
+        Returns:
+            A dict with ``success`` (bool) and ``message``.
+        """
+        removed = self.feedback_db.unmark(fingerprint)
+        if removed:
+            return {
+                "success": True,
+                "message": f"False positive record '{fingerprint}' removed.",
+            }
+        return {
+            "success": False,
+            "message": f"No active false positive record found for '{fingerprint}'.",
+        }
 
     # ------------------------------------------------------------------
     # Audit / status
@@ -528,8 +609,16 @@ class GuardianShield:
         }
         if self._project_config:
             result["project_config"] = self._project_config.to_dict()
+        # Include false positive feedback stats if DB is available.
+        if self._feedback_db is not None:
+            try:
+                result["false_positives"] = self._feedback_db.stats()
+            except Exception:
+                result["false_positives"] = {"error": "unavailable"}
         return result
 
     def close(self) -> None:
-        """Close the audit database connection."""
+        """Close database connections."""
         self._audit.close()
+        if self._feedback_db is not None:
+            self._feedback_db.close()

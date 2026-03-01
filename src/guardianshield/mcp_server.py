@@ -440,6 +440,67 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["path"],
         },
     },
+    {
+        "name": "mark_false_positive",
+        "description": (
+            "Mark a security finding as a false positive. The finding will "
+            "be flagged in future scans, and similar patterns at other "
+            "locations will be annotated as potential false positives."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "finding": {
+                    "type": "object",
+                    "description": "The finding dict as returned by a scan tool.",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Optional explanation of why this is a false positive.",
+                },
+            },
+            "required": ["finding"],
+        },
+    },
+    {
+        "name": "list_false_positives",
+        "description": (
+            "List active false positive records. Shows findings that have "
+            "been marked as false positives, with optional filtering by scanner."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "scanner": {
+                    "type": "string",
+                    "description": "Optional filter by scanner name (e.g. 'code_scanner', 'secrets').",
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Maximum number of records to return (default 100).",
+                    "minimum": 1,
+                    "maximum": 500,
+                },
+            },
+        },
+    },
+    {
+        "name": "unmark_false_positive",
+        "description": (
+            "Remove a false positive record by its fingerprint. "
+            "The finding will no longer be flagged in future scans."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "fingerprint": {
+                    "type": "string",
+                    "description": "The fingerprint of the false positive record to remove.",
+                },
+            },
+            "required": ["fingerprint"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -558,6 +619,9 @@ class GuardianShieldMCPServer:
             "sync_vulnerabilities": self._tool_sync_vulnerabilities,
             "parse_manifest": self._tool_parse_manifest,
             "scan_dependencies": self._tool_scan_dependencies,
+            "mark_false_positive": self._tool_mark_false_positive,
+            "list_false_positives": self._tool_list_false_positives,
+            "unmark_false_positive": self._tool_unmark_false_positive,
         }
 
         logger.info("GuardianShieldMCPServer created (shield=%r)", self._shield)
@@ -934,11 +998,19 @@ class GuardianShieldMCPServer:
                 status["osv_cache"] = self._shield.osv_cache.stats()
             except Exception:
                 status["osv_cache"] = {"error": "unavailable"}
+        # Include false positive stats if available.
+        if self._shield._feedback_db is not None:
+            try:
+                status["false_positives"] = self._shield.feedback_db.stats()
+            except Exception:
+                status["false_positives"] = {"error": "unavailable"}
         status["capabilities"] = [
             "scan_code", "scan_input", "scan_output", "check_secrets",
             "scan_file", "scan_directory", "test_pattern",
             "check_dependencies", "sync_vulnerabilities",
             "scan_dependencies",
+            "mark_false_positive", "list_false_positives",
+            "unmark_false_positive",
         ]
         return self._tool_success(json.dumps(status, indent=2))
 
@@ -1150,6 +1222,41 @@ class GuardianShieldMCPServer:
             "finding_count": len(findings),
             "findings": [f.to_dict() for f in self._maybe_redact(findings)],
         }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_mark_false_positive(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        finding = args.get("finding")
+        if not finding or not isinstance(finding, dict):
+            return self._tool_error("'finding' is required (a finding dict from a scan).")
+
+        reason = args.get("reason", "")
+        try:
+            result = self._shield.mark_false_positive(finding, reason=reason)
+        except (ValueError, KeyError) as exc:
+            return self._tool_error(f"Invalid finding: {exc}")
+
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_list_false_positives(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        scanner = args.get("scanner")
+        limit = args.get("limit", 100)
+
+        records = self._shield.list_false_positives(scanner=scanner, limit=limit)
+        result = {
+            "count": len(records),
+            "false_positives": records,
+        }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_unmark_false_positive(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        fingerprint = args.get("fingerprint")
+        if not fingerprint or not isinstance(fingerprint, str):
+            return self._tool_error("'fingerprint' is required.")
+
+        result = self._shield.unmark_false_positive(fingerprint)
         return self._tool_success(json.dumps(result, indent=2))
 
     # ------------------------------------------------------------------
