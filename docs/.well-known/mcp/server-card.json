@@ -1,6 +1,6 @@
 {
   "name": "guardianshield",
-  "version": "1.0.2",
+  "version": "1.1.0b1",
   "displayName": "GuardianShield",
   "description": "Universal AI security layer — code scanning, PII detection, prompt injection defense, secret detection, dependency auditing, and audit logging.",
   "homepage": "https://github.com/sparkvibe-io/GuardianShield",
@@ -13,7 +13,7 @@
   "package": {
     "registry": "pypi",
     "name": "guardianshield",
-    "version": "1.0.2",
+    "version": "1.1.0b1",
     "command": "guardianshield-mcp"
   },
   "tools": [
@@ -31,7 +31,8 @@
         "properties": {
           "code": { "type": "string", "description": "The source code to scan." },
           "file_path": { "type": "string", "description": "Optional file path for context in findings." },
-          "language": { "type": "string", "description": "Optional programming language hint." }
+          "language": { "type": "string", "description": "Optional programming language hint." },
+          "engines": { "type": "array", "items": { "type": "string" }, "description": "Optional list of engine names to use for this scan." }
         },
         "required": ["code"]
       }
@@ -306,6 +307,89 @@
           "exclude": { "type": "array", "items": { "type": "string" }, "description": "Glob patterns to skip (e.g. [\"vendor/*\"])." }
         },
         "required": ["path"]
+      }
+    },
+    {
+      "name": "mark_false_positive",
+      "description": "Mark a security finding as a false positive. The finding will be flagged in future scans, and similar patterns at other locations will be annotated as potential false positives.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "finding": { "type": "object", "description": "The finding dict as returned by a scan tool." },
+          "reason": { "type": "string", "description": "Optional explanation of why this is a false positive." }
+        },
+        "required": ["finding"]
+      }
+    },
+    {
+      "name": "list_false_positives",
+      "description": "List active false positive records. Shows findings that have been marked as false positives, with optional filtering by scanner.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scanner": { "type": "string", "description": "Optional filter by scanner name (e.g. 'code_scanner', 'secrets')." },
+          "limit": { "type": "integer", "description": "Maximum number of records to return (default 100).", "minimum": 1, "maximum": 500 }
+        }
+      }
+    },
+    {
+      "name": "unmark_false_positive",
+      "description": "Remove a false positive record by its fingerprint. The finding will no longer be flagged in future scans.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": true,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "fingerprint": { "type": "string", "description": "The fingerprint of the false positive record to remove." }
+        },
+        "required": ["fingerprint"]
+      }
+    },
+    {
+      "name": "list_engines",
+      "description": "List available analysis engines with their capabilities and enabled status. Returns each engine's name, whether it is enabled in the current profile, and its capabilities.",
+      "annotations": {
+        "readOnlyHint": true,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {}
+      }
+    },
+    {
+      "name": "set_engine",
+      "description": "Set which analysis engines are active for code scanning. Accepts a list of engine names to enable for the current session. Available engines can be listed with list_engines.",
+      "annotations": {
+        "readOnlyHint": false,
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "engines": { "type": "array", "items": { "type": "string" }, "description": "List of engine names to enable." }
+        },
+        "required": ["engines"]
       }
     }
   ],
