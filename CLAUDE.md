@@ -1,12 +1,12 @@
 # GuardianShield — AI Agent Instructions
 
 GuardianShield is a universal AI security layer exposed as an MCP server.
-**Version**: 1.0.2 | **Tests**: 1362 | **Dependencies**: zero (stdlib only)
+**Version**: 1.0.2 | **Tests**: 1396 | **Dependencies**: zero (stdlib only)
 
 ## Available MCP Tools (21)
 
 ### Scanning
-- **scan_code**: Scan source code for vulnerabilities and hardcoded secrets (Python + JS/TS)
+- **scan_code**: Scan source code for vulnerabilities and hardcoded secrets (Python, JS/TS, Go, Java, Ruby, PHP, C#)
 - **scan_file**: Scan a single file (auto-detects language from extension)
 - **scan_directory**: Recursively scan a directory with extension/exclude filtering and streaming progress
 - **scan_input**: Check input for prompt injection attempts
@@ -61,7 +61,12 @@ src/guardianshield/
 │   ├── __init__.py  # Registry: LANGUAGE_PATTERNS, EXTENSION_MAP, REMEDIATION_MAP
 │   ├── common.py    # 3 cross-language patterns + remediation
 │   ├── python.py    # 15 Python patterns + remediation
-│   └── javascript.py # 7 JS/TS patterns + remediation
+│   ├── javascript.py # 7 JS/TS patterns + remediation
+│   ├── go.py        # 13 Go patterns + remediation
+│   ├── java.py      # 12 Java patterns + remediation
+│   ├── ruby.py      # 16 Ruby/Rails patterns + remediation
+│   ├── php.py       # 20 PHP patterns + remediation
+│   └── csharp.py    # 22 C#/ASP.NET patterns + remediation
 ├── secrets.py       # Secret/credential detection (12+ patterns)
 ├── injection.py     # Prompt injection detector (9+ patterns)
 ├── pii.py           # PII detection (regex + optional Presidio)
@@ -91,12 +96,14 @@ src/guardianshield/
 - **Version-aware CVE matching**: PEP 440 + semver parsing with affected range filtering (confidence 1.0 confirmed, 0.7 indeterminate)
 - **4 ecosystems**: PyPI, npm, Go, Packagist — all backed by local OSV.dev SQLite cache
 - **Analysis engines**: Pluggable `AnalysisEngine` protocol with `RegexEngine` (Phase 1); `EngineRegistry` per `GuardianShield` instance; `scan_code` delegates through enabled engines
+- **Graceful audit degradation**: `_log()` catches all exceptions so scans succeed even when audit DB is unwritable
+- **scan_dependencies_in_directory**: Returns `(findings, metadata)` tuple — metadata contains `manifests_found` and `dependency_count` directly (no audit log round-trip)
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 1362 tests
+pytest tests/ -v          # 1396 tests
 ruff check src/ tests/    # Linting
 ```
 
