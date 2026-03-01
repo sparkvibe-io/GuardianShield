@@ -6,12 +6,12 @@
     "url": "https://github.com/sparkvibe-io/GuardianShield",
     "source": "github"
   },
-  "version": "1.0.2",
+  "version": "1.1.0b1",
   "packages": [
     {
       "registryType": "pypi",
       "identifier": "guardianshield",
-      "version": "1.0.2",
+      "version": "1.1.0b1",
       "transport": {
         "type": "stdio"
       },
