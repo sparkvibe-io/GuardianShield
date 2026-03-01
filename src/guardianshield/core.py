@@ -18,6 +18,7 @@ from . import __version__
 from .audit import AuditLog
 from .config import ProjectConfig
 from .content import check_content
+from .engines import AnalysisEngine, EngineRegistry, RegexEngine
 from .feedback import FalsePositiveDB
 from .findings import Finding
 from .injection import check_injection
@@ -27,7 +28,6 @@ from .osv import check_dependencies as _check_dependencies
 from .patterns import EXTENSION_MAP
 from .pii import check_pii
 from .profiles import SafetyProfile, list_profiles, load_profile
-from .scanner import scan_code as _scan_code
 from .secrets import check_secrets
 
 logger = logging.getLogger(__name__)
@@ -59,6 +59,8 @@ class GuardianShield:
         self._project_config = project_config
         self._osv_cache = osv_cache
         self._feedback_db = feedback_db
+        self._engine_registry = EngineRegistry()
+        self._engine_registry.register(RegexEngine())
 
     # ------------------------------------------------------------------
     # Helpers
@@ -125,6 +127,47 @@ class GuardianShield:
         return self._profile
 
     # ------------------------------------------------------------------
+    # Engine management
+    # ------------------------------------------------------------------
+
+    @property
+    def engine_registry(self) -> EngineRegistry:
+        """Return the engine registry for this instance."""
+        return self._engine_registry
+
+    def list_engines(self) -> list[dict]:
+        """Return info about all registered engines with enabled status."""
+        return self._engine_registry.list_engines(
+            enabled_names=self._profile.code_scanner.engines,
+        )
+
+    def set_engines(self, engine_names: list[str]) -> list[str]:
+        """Set the active engines for code scanning.
+
+        Args:
+            engine_names: List of engine names to enable.
+
+        Returns:
+            The updated list of enabled engine names.
+
+        Raises:
+            ValueError: If any name is not a registered engine.
+        """
+        available = set(self._engine_registry.available_names)
+        unknown = [n for n in engine_names if n not in available]
+        if unknown:
+            raise ValueError(
+                f"Unknown engine(s): {', '.join(unknown)}. "
+                f"Available: {', '.join(sorted(available))}"
+            )
+        self._profile.code_scanner.engines = list(engine_names)
+        return list(engine_names)
+
+    def register_engine(self, engine: AnalysisEngine) -> None:
+        """Register a custom analysis engine."""
+        self._engine_registry.register(engine)
+
+    # ------------------------------------------------------------------
     # Scan methods
     # ------------------------------------------------------------------
 
@@ -133,23 +176,35 @@ class GuardianShield:
         code: str,
         file_path: str | None = None,
         language: str | None = None,
+        engines: list[str] | None = None,
     ) -> list[Finding]:
         """Scan source code for vulnerabilities and hardcoded secrets.
 
         Combines the code vulnerability scanner and the secret detector.
+
+        Args:
+            code: Source code to scan.
+            file_path: Optional file path for context and language detection.
+            language: Optional language hint.
+            engines: Optional list of engine names to use for this scan.
+                When ``None``, uses the engines configured in the active
+                profile's ``code_scanner.engines``.
         """
         findings: list[Finding] = []
 
         cfg = self._profile.code_scanner
         if cfg.enabled:
-            findings.extend(
-                _scan_code(
-                    code,
-                    sensitivity=cfg.sensitivity,
-                    file_path=file_path,
-                    language=language,
+            engine_names = engines if engines is not None else cfg.engines
+            active_engines = self._engine_registry.enabled_engines(engine_names)
+            for engine in active_engines:
+                findings.extend(
+                    engine.analyze(
+                        code,
+                        language=language,
+                        sensitivity=cfg.sensitivity,
+                        file_path=file_path,
+                    )
                 )
-            )
 
         sec_cfg = self._profile.secret_scanner
         if sec_cfg.enabled:
@@ -607,6 +662,9 @@ class GuardianShield:
             },
             "audit": stats,
         }
+        result["engines"] = self._engine_registry.list_engines(
+            enabled_names=self._profile.code_scanner.engines,
+        )
         if self._project_config:
             result["project_config"] = self._project_config.to_dict()
         # Include false positive feedback stats if DB is available.

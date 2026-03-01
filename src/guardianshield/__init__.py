@@ -24,6 +24,7 @@ __version__ = "1.0.2"
 from .config import ProjectConfig, discover_config
 from .core import GuardianShield
 from .dedup import DedupResult, FindingDeduplicator
+from .engines import AnalysisEngine, EngineRegistry, RegexEngine
 from .enrichment import enrich_finding
 from .feedback import FalsePositiveDB
 from .findings import Finding, FindingType, Range, Remediation, Severity
@@ -47,8 +48,10 @@ from .profiles import SafetyProfile, ScannerConfig
 
 __all__ = [
     "__version__",
+    "AnalysisEngine",
     "DedupResult",
     "Dependency",
+    "EngineRegistry",
     "FalsePositiveDB",
     "Finding",
     "FindingDeduplicator",
@@ -58,6 +61,7 @@ __all__ = [
     "OsvCache",
     "ProjectConfig",
     "Range",
+    "RegexEngine",
     "Remediation",
     "SafetyProfile",
     "ScannerConfig",
