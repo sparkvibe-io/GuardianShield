@@ -15,7 +15,7 @@ Common questions about GuardianShield — what it does, how it works, and how to
 
     GuardianShield is a **free, open-source MCP server** that acts as a universal AI security layer. It sits between your AI coding agent and your codebase, providing real-time code scanning, PII detection, prompt injection defense, secret detection, and audit logging.
 
-    GuardianShield exposes 16 MCP tools that any compatible AI client can call — giving every AI agent the same security guardrails, regardless of which editor or platform you use.
+    GuardianShield exposes 21 MCP tools that any compatible AI client can call — giving every AI agent the same security guardrails, regardless of which editor or platform you use.
 
 ??? question "Is it really free?"
 

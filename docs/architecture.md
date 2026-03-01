@@ -15,7 +15,7 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
 [Any MCP Client: Claude Code / VS Code / Cursor / etc.]
     |  JSON-RPC over stdin/stdout
     |
-[GuardianShieldMCPServer]         <- mcp_server.py (16 tools)
+[GuardianShieldMCPServer]         <- mcp_server.py (21 tools)
     |
 [GuardianShield core]             <- core.py (orchestrator)
     |
@@ -27,9 +27,11 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
     |-- check_secrets()  -> secrets.py                           -> Finding[]
     |-- check_deps()     -> osv.py -> SQLite cache               -> Finding[]
     |
+    |-- [EngineRegistry]  <- engines.py (RegexEngine + pluggable)
     |-- [AuditLog]       -> SQLite (audit.py)
     |-- [ProjectConfig]  <- config.py (.guardianshield.json/yaml)
     |-- [Deduplicator]   <- dedup.py (SHA-256 fingerprints)
+    |-- [FalsePositiveDB] <- feedback.py (per-project SQLite)
     '-- [SafetyProfile]  <- profiles.py + YAML
 ```
 
@@ -45,7 +47,7 @@ The architecture has three distinct layers:
 
 ### `mcp_server.py` — MCP Server
 
-Hand-rolled JSON-RPC 2.0 server that implements the full MCP protocol without any SDK dependency. Reads from `stdin`, writes to `stdout`, and handles `initialize`, `tools/list`, `tools/call`, and all required MCP lifecycle methods. Exposes 16 security tools to any MCP-compatible client.
+Hand-rolled JSON-RPC 2.0 server that implements the full MCP protocol without any SDK dependency. Reads from `stdin`, writes to `stdout`, and handles `initialize`, `tools/list`, `tools/call`, and all required MCP lifecycle methods. Exposes 21 security tools to any MCP-compatible client.
 
 ### `core.py` — Orchestrator
 
@@ -53,7 +55,11 @@ Central orchestrator that creates and manages scanner instances and routes scan 
 
 ### `scanner.py` — Code Vulnerability Scanner
 
-Detects insecure code patterns using compiled regular expressions. Delegates to the `patterns/` package for language-specific pattern sets (Python: 15 patterns, JS/TS: 7 patterns, plus 3 cross-language). Patterns are compiled at module load time for performance. Each pattern includes CWE IDs, confidence scores, and remediation suggestions.
+Detects insecure code patterns using compiled regular expressions. Delegates to the `patterns/` package for language-specific pattern sets across 7 languages (108 patterns total). Patterns are compiled at module load time for performance. Each pattern includes CWE IDs, confidence scores, and remediation suggestions.
+
+### `engines.py` — Analysis Engine Framework
+
+Defines the `AnalysisEngine` Protocol for pluggable analysis strategies and the `EngineRegistry` for managing them. Ships with `RegexEngine`, which wraps `scanner.scan_code()` and tags findings with `details["engine"] = "regex"`. Each `GuardianShield` instance owns its own registry, and engines can be selected per-scan or per-session via `set_engine`.
 
 ### `secrets.py` — Secret & Credential Detector
 
@@ -85,11 +91,19 @@ Loads and manages safety profiles from YAML configuration files. Ships with 5 bu
 
 ### `patterns/` — Language-Specific Pattern Sets
 
-A sub-package containing vulnerability detection patterns organized by language. The registry (`__init__.py`) provides `LANGUAGE_PATTERNS`, `EXTENSION_MAP` (maps file extensions to language keys), and `REMEDIATION_MAP` (maps pattern names to `Remediation` objects). Pattern modules: `common.py` (3 cross-language), `python.py` (15 Python-specific), `javascript.py` (7 JS/TS-specific). Each pattern is a 7-element tuple: `(name, regex, finding_type, severity, description, confidence, cwe_ids)`.
+A sub-package containing vulnerability detection patterns organized by language. The registry (`__init__.py`) provides `LANGUAGE_PATTERNS`, `EXTENSION_MAP` (maps file extensions to language keys), and `REMEDIATION_MAP` (maps pattern names to `Remediation` objects). Pattern modules: `common.py` (3), `python.py` (15), `javascript.py` (7), `go.py` (13), `java.py` (12), `ruby.py` (16), `php.py` (20), `csharp.py` (22). Each pattern is a 7-element tuple: `(name, regex, finding_type, severity, description, confidence, cwe_ids)`.
 
 ### `config.py` — Project Configuration
 
 Discovers and loads `.guardianshield.json` or `.guardianshield.yaml` files from the project directory tree. Supports per-project settings including profile selection, severity overrides, exclude paths, and custom patterns. The `discover_config()` function walks up from the current directory to find the nearest config file.
+
+### `enrichment.py` — Finding Enrichment
+
+Enriches every finding with contextual details: surrounding code lines, match explanation, CWE/OWASP Top 10 references, vulnerability class, and scanner metadata. The `enrich_finding()` function is called during scanning and merges into the finding's `details` dict.
+
+### `feedback.py` — False Positive Feedback
+
+Per-project SQLite store (`FalsePositiveDB`) that tracks false positive records. Findings are auto-annotated with `metadata["false_positive"]` (exact match) or `metadata["potential_false_positive"]` (pattern match). Records are managed via `mark_false_positive`, `list_false_positives`, and `unmark_false_positive` MCP tools.
 
 ### `dedup.py` — Finding Deduplication
 
@@ -186,14 +200,20 @@ GuardianShield/
 |-- src/
 |   '-- guardianshield/
 |       |-- __init__.py          # Package init, public API exports
-|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (16 tools)
+|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (21 tools)
 |       |-- core.py              # Orchestrator — routes scans through scanners
 |       |-- scanner.py           # Code vulnerability scanner (uses patterns/)
+|       |-- engines.py           # AnalysisEngine protocol, RegexEngine, EngineRegistry
 |       |-- patterns/            # Language-specific vulnerability patterns
 |       |   |-- __init__.py      # Registry: LANGUAGE_PATTERNS, EXTENSION_MAP, REMEDIATION_MAP
 |       |   |-- common.py        # 3 cross-language patterns + remediation
 |       |   |-- python.py        # 15 Python patterns + remediation
-|       |   '-- javascript.py    # 7 JS/TS patterns + remediation
+|       |   |-- javascript.py    # 7 JS/TS patterns + remediation
+|       |   |-- go.py            # 13 Go patterns + remediation
+|       |   |-- java.py          # 12 Java patterns + remediation
+|       |   |-- ruby.py          # 16 Ruby/Rails patterns + remediation
+|       |   |-- php.py           # 20 PHP patterns + remediation
+|       |   '-- csharp.py        # 22 C#/ASP.NET patterns + remediation
 |       |-- secrets.py           # Secret/credential detector (12+ patterns)
 |       |-- injection.py         # Prompt injection detector (9+ heuristics)
 |       |-- pii.py               # PII detector (regex MVP + optional Presidio)
@@ -203,6 +223,8 @@ GuardianShield/
 |       |-- profiles.py          # Safety profile loader and manager
 |       |-- config.py            # Project config discovery (.guardianshield.json/yaml)
 |       |-- dedup.py             # Finding deduplication (SHA-256 fingerprints)
+|       |-- enrichment.py        # Finding enrichment (code context, CWE/OWASP refs)
+|       |-- feedback.py          # False positive feedback loop (per-project SQLite)
 |       |-- osv.py               # OSV.dev dependency scanner (SQLite cache)
 |       |-- manifest.py          # Manifest file parser (11 formats)
 |       '-- profiles/

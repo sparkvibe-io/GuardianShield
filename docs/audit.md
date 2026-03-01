@@ -308,5 +308,5 @@ pii_findings = shield.get_findings(finding_type="pii")
 ## Next Steps
 
 - **[Getting Started](getting-started.md)** — Install GuardianShield and run your first scan.
-- **[MCP Server](mcp-server.md)** — Full reference for all 16 MCP tools including `audit_log` and `get_findings`.
+- **[MCP Server](mcp-server.md)** — Full reference for all 21 MCP tools including `audit_log` and `get_findings`.
 - **[Safety Profiles](profiles.md)** — Configure domain-specific security policies for your industry.

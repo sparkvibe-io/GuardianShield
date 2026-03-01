@@ -38,7 +38,7 @@ code scanning, PII detection, prompt injection defense, secret detection, and au
 
 <div class="stats-row">
   <div class="stat-card">
-    <span class="stat-number">16</span>
+    <span class="stat-number">21</span>
     <span class="stat-label">MCP Tools</span>
   </div>
   <div class="stat-card">
@@ -121,10 +121,10 @@ GuardianShield sits between your AI agent and your codebase, scanning every inte
 
 </div>
 
-<!-- 16 MCP Tools -->
+<!-- 21 MCP Tools -->
 <div class="gs-section" markdown>
 
-## :material-wrench: 16 MCP Tools
+## :material-wrench: 21 MCP Tools
 
 Every security capability is exposed as a standard MCP tool — callable from any compatible AI client.
 
@@ -192,6 +192,26 @@ Every security capability is exposed as a standard MCP tool — callable from an
   <div class="tool-card">
     <h3>scan_dependencies</h3>
     <p>Scan a directory for manifest files and check all dependencies for known vulnerabilities.</p>
+  </div>
+  <div class="tool-card">
+    <h3>mark_false_positive</h3>
+    <p>Mark a finding as false positive — flags future matches and annotates similar patterns.</p>
+  </div>
+  <div class="tool-card">
+    <h3>list_false_positives</h3>
+    <p>List active false positive records with optional filtering by scanner.</p>
+  </div>
+  <div class="tool-card">
+    <h3>unmark_false_positive</h3>
+    <p>Remove a false positive record so findings are no longer suppressed.</p>
+  </div>
+  <div class="tool-card">
+    <h3>list_engines</h3>
+    <p>List available analysis engines with their capabilities and enabled status.</p>
+  </div>
+  <div class="tool-card">
+    <h3>set_engine</h3>
+    <p>Set which analysis engines are active for code scanning in the current session.</p>
   </div>
 </div>
 
@@ -380,6 +400,9 @@ Pre-configured security policies for different industries and use cases. Switch 
 | **Manifest Parsing** | — | — | — | — | **:material-check-circle:{ .gs-check }** |
 | **Directory Dep Scan** | — | — | — | — | **:material-check-circle:{ .gs-check }** |
 | **GuardianShield** | **1 of 16** | **2 of 16** | **2 of 16** | **1 of 16** | **16 of 16** |
+
+!!! info "Feature comparison"
+    The comparison above covers 16 functional categories. GuardianShield exposes **21 MCP tools** total — some categories (like dependency scanning) map to multiple tools.
 
 </div>
 
