@@ -78,12 +78,12 @@ class FindingDeduplicator:
     """
 
     def __init__(self) -> None:
-        self._previous: dict[str, Finding] = {}
+        self._previous_fps: set[str] = set()
 
     @property
     def previous_fingerprints(self) -> set[str]:
         """Return the set of fingerprints from the last scan."""
-        return set(self._previous.keys())
+        return set(self._previous_fps)
 
     def deduplicate(self, findings: list[Finding]) -> DedupResult:
         """Compare *findings* against the last scan and return a delta.
@@ -96,12 +96,11 @@ class FindingDeduplicator:
             fp = _fingerprint(f)
             current[fp] = f
 
-        previous_fps = set(self._previous.keys())
         current_fps = set(current.keys())
 
-        new_fps = current_fps - previous_fps
-        unchanged_fps = current_fps & previous_fps
-        removed_fps = previous_fps - current_fps
+        new_fps = current_fps - self._previous_fps
+        unchanged_fps = current_fps & self._previous_fps
+        removed_fps = self._previous_fps - current_fps
 
         result = DedupResult(
             new=[current[fp] for fp in new_fps],
@@ -110,10 +109,10 @@ class FindingDeduplicator:
             all_findings=findings,
         )
 
-        # Update baseline.
-        self._previous = current
+        # Update baseline — store only fingerprints, not full Finding objects.
+        self._previous_fps = current_fps
         return result
 
     def reset(self) -> None:
         """Clear the fingerprint baseline."""
-        self._previous.clear()
+        self._previous_fps.clear()

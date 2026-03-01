@@ -27,9 +27,11 @@ Usage::
 from __future__ import annotations
 
 import contextlib
+import hashlib
 import json
 import logging
 import os
+import re
 import signal
 import sys
 from typing import Any
@@ -525,6 +527,39 @@ class GuardianShieldMCPServer:
         self._shield: GuardianShield | None = shield
         self._redact = redact_responses
         self._initialized = False
+
+        # Build dispatch tables once per instance, not per call.
+        self._METHOD_HANDLERS: dict[str, Any] = {
+            "initialize": self._handle_initialize,
+            "initialized": self._handle_initialized,
+            "notifications/initialized": self._handle_initialized,
+            "ping": self._handle_ping,
+            "tools/list": self._handle_tools_list,
+            "tools/call": self._handle_tools_call,
+            "resources/list": self._handle_resources_list,
+            "resources/read": self._handle_resources_read,
+            "prompts/list": self._handle_prompts_list,
+            "prompts/get": self._handle_prompts_get,
+        }
+        self._TOOL_HANDLERS: dict[str, Any] = {
+            "scan_code": self._tool_scan_code,
+            "scan_input": self._tool_scan_input,
+            "scan_output": self._tool_scan_output,
+            "check_secrets": self._tool_check_secrets,
+            "get_profile": self._tool_get_profile,
+            "set_profile": self._tool_set_profile,
+            "audit_log": self._tool_audit_log,
+            "get_findings": self._tool_get_findings,
+            "shield_status": self._tool_shield_status,
+            "scan_file": self._tool_scan_file,
+            "scan_directory": self._tool_scan_directory,
+            "test_pattern": self._tool_test_pattern,
+            "check_dependencies": self._tool_check_dependencies,
+            "sync_vulnerabilities": self._tool_sync_vulnerabilities,
+            "parse_manifest": self._tool_parse_manifest,
+            "scan_dependencies": self._tool_scan_dependencies,
+        }
+
         logger.info("GuardianShieldMCPServer created (shield=%r)", self._shield)
 
     # ------------------------------------------------------------------
@@ -602,19 +637,7 @@ class GuardianShieldMCPServer:
             self._send_result(msg_id, result)
 
     def _get_handler(self, method: str) -> Any:
-        handlers: dict[str, Any] = {
-            "initialize": self._handle_initialize,
-            "initialized": self._handle_initialized,
-            "notifications/initialized": self._handle_initialized,
-            "ping": self._handle_ping,
-            "tools/list": self._handle_tools_list,
-            "tools/call": self._handle_tools_call,
-            "resources/list": self._handle_resources_list,
-            "resources/read": self._handle_resources_read,
-            "prompts/list": self._handle_prompts_list,
-            "prompts/get": self._handle_prompts_get,
-        }
-        return handlers.get(method)
+        return self._METHOD_HANDLERS.get(method)
 
     # ------------------------------------------------------------------
     # Protocol handlers
@@ -665,26 +688,7 @@ class GuardianShieldMCPServer:
 
         logger.info("Tool call: %s", tool_name)
 
-        tool_handlers: dict[str, Any] = {
-            "scan_code": self._tool_scan_code,
-            "scan_input": self._tool_scan_input,
-            "scan_output": self._tool_scan_output,
-            "check_secrets": self._tool_check_secrets,
-            "get_profile": self._tool_get_profile,
-            "set_profile": self._tool_set_profile,
-            "audit_log": self._tool_audit_log,
-            "get_findings": self._tool_get_findings,
-            "shield_status": self._tool_shield_status,
-            "scan_file": self._tool_scan_file,
-            "scan_directory": self._tool_scan_directory,
-            "test_pattern": self._tool_test_pattern,
-            "check_dependencies": self._tool_check_dependencies,
-            "sync_vulnerabilities": self._tool_sync_vulnerabilities,
-            "parse_manifest": self._tool_parse_manifest,
-            "scan_dependencies": self._tool_scan_dependencies,
-        }
-
-        handler = tool_handlers.get(tool_name)
+        handler = self._TOOL_HANDLERS.get(tool_name)
         if handler is None:
             return self._tool_error(f"Unknown tool: {tool_name}")
 
@@ -1001,8 +1005,6 @@ class GuardianShieldMCPServer:
         return self._tool_success(json.dumps(result, indent=2))
 
     def _tool_test_pattern(self, args: dict[str, Any]) -> dict[str, Any]:
-        import re as _re
-
         regex = args.get("regex")
         sample = args.get("sample")
         if not regex or not isinstance(regex, str):
@@ -1013,8 +1015,8 @@ class GuardianShieldMCPServer:
         language = args.get("language", "")
 
         try:
-            compiled = _re.compile(regex)
-        except _re.error as exc:
+            compiled = re.compile(regex)
+        except re.error as exc:
             return self._tool_error(f"Invalid regex: {exc}")
 
         matches = []
@@ -1134,9 +1136,8 @@ class GuardianShieldMCPServer:
         manifests_found: list[str] = []
         dependency_count = 0
         if log:
-            import json as _json
             try:
-                meta = _json.loads(log[0].get("metadata", "{}"))
+                meta = json.loads(log[0].get("metadata", "{}"))
                 manifests_found = meta.get("manifests_found", [])
                 dependency_count = meta.get("dependency_count", 0)
             except (ValueError, TypeError):
@@ -1159,10 +1160,9 @@ class GuardianShieldMCPServer:
         """Optionally redact matched_text in findings."""
         if not self._redact:
             return findings
-        import hashlib as _hl
         for f in findings:
             if f.matched_text:
-                h = _hl.sha256(f.matched_text.encode("utf-8")).hexdigest()[:12]
+                h = hashlib.sha256(f.matched_text.encode("utf-8")).hexdigest()[:12]
                 f.matched_text = f"[REDACTED:{h}]"
         return findings
 

@@ -104,24 +104,26 @@ class AuditLog:
             )
             audit_id: int = cursor.lastrowid  # type: ignore[assignment]
 
-            for f in findings:
-                f_meta = json.dumps(f.metadata, ensure_ascii=False) if f.metadata else None
-                self._conn.execute(
+            if findings:
+                self._conn.executemany(
                     "INSERT INTO findings (audit_id, finding_type, severity, message, "
                     "matched_text, line_number, file_path, scanner, finding_id, metadata) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        audit_id,
-                        f.finding_type.value if hasattr(f.finding_type, "value") else f.finding_type,
-                        f.severity.value if hasattr(f.severity, "value") else f.severity,
-                        f.message,
-                        f.matched_text or None,
-                        f.line_number or None,
-                        f.file_path,
-                        f.scanner or None,
-                        f.finding_id,
-                        f_meta,
-                    ),
+                    [
+                        (
+                            audit_id,
+                            f.finding_type.value if hasattr(f.finding_type, "value") else f.finding_type,
+                            f.severity.value if hasattr(f.severity, "value") else f.severity,
+                            f.message,
+                            f.matched_text or None,
+                            f.line_number or None,
+                            f.file_path,
+                            f.scanner or None,
+                            f.finding_id,
+                            json.dumps(f.metadata, ensure_ascii=False) if f.metadata else None,
+                        )
+                        for f in findings
+                    ],
                 )
 
             self._conn.commit()
