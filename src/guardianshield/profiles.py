@@ -37,11 +37,13 @@ class ScannerConfig:
         enabled: Whether the scanner is active.
         sensitivity: Detection sensitivity -- ``"low"``, ``"medium"``, or ``"high"``.
         custom_patterns: Extra regex patterns the scanner should check.
+        engines: Analysis engines to use (default ``["regex"]``).
     """
 
     enabled: bool = True
     sensitivity: str = "medium"
     custom_patterns: list[str] = field(default_factory=list)
+    engines: list[str] = field(default_factory=lambda: ["regex"])
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a plain dict."""
@@ -49,6 +51,7 @@ class ScannerConfig:
             "enabled": self.enabled,
             "sensitivity": self.sensitivity,
             "custom_patterns": list(self.custom_patterns),
+            "engines": list(self.engines),
         }
 
     @classmethod
@@ -58,6 +61,7 @@ class ScannerConfig:
             enabled=data.get("enabled", True),
             sensitivity=data.get("sensitivity", "medium"),
             custom_patterns=list(data.get("custom_patterns", [])),
+            engines=list(data.get("engines", ["regex"])),
         )
 
 

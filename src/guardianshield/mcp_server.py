@@ -98,6 +98,11 @@ TOOLS: list[dict[str, Any]] = [
                     "type": "string",
                     "description": "Optional programming language hint.",
                 },
+                "engines": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Optional list of engine names to use for this scan.",
+                },
             },
             "required": ["code"],
         },
@@ -501,6 +506,37 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["fingerprint"],
         },
     },
+    {
+        "name": "list_engines",
+        "description": (
+            "List available analysis engines with their capabilities "
+            "and enabled status. Returns each engine's name, whether "
+            "it is enabled in the current profile, and its capabilities."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {},
+        },
+    },
+    {
+        "name": "set_engine",
+        "description": (
+            "Set which analysis engines are active for code scanning. "
+            "Accepts a list of engine names to enable for the current "
+            "session. Available engines can be listed with list_engines."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "engines": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "List of engine names to enable.",
+                },
+            },
+            "required": ["engines"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -622,6 +658,8 @@ class GuardianShieldMCPServer:
             "mark_false_positive": self._tool_mark_false_positive,
             "list_false_positives": self._tool_list_false_positives,
             "unmark_false_positive": self._tool_unmark_false_positive,
+            "list_engines": self._tool_list_engines,
+            "set_engine": self._tool_set_engine,
         }
 
         logger.info("GuardianShieldMCPServer created (shield=%r)", self._shield)
@@ -883,8 +921,11 @@ class GuardianShieldMCPServer:
 
         file_path = args.get("file_path")
         language = args.get("language")
+        engines = args.get("engines")
 
-        findings = self._shield.scan_code(code, file_path=file_path, language=language)
+        findings = self._shield.scan_code(
+            code, file_path=file_path, language=language, engines=engines,
+        )
         result = {
             "finding_count": len(findings),
             "findings": [f.to_dict() for f in self._maybe_redact(findings)],
@@ -1011,6 +1052,7 @@ class GuardianShieldMCPServer:
             "scan_dependencies",
             "mark_false_positive", "list_false_positives",
             "unmark_false_positive",
+            "list_engines", "set_engine",
         ]
         return self._tool_success(json.dumps(status, indent=2))
 
@@ -1257,6 +1299,32 @@ class GuardianShieldMCPServer:
             return self._tool_error("'fingerprint' is required.")
 
         result = self._shield.unmark_false_positive(fingerprint)
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_list_engines(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        engines = self._shield.list_engines()
+        result = {
+            "count": len(engines),
+            "engines": engines,
+        }
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_set_engine(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        engine_names = args.get("engines")
+        if not engine_names or not isinstance(engine_names, list):
+            return self._tool_error("'engines' is required (array of engine names).")
+
+        try:
+            enabled = self._shield.set_engines(engine_names)
+        except ValueError as exc:
+            return self._tool_error(str(exc))
+
+        result = {
+            "message": f"Engines set to: {', '.join(enabled)}",
+            "engines": enabled,
+        }
         return self._tool_success(json.dumps(result, indent=2))
 
     # ------------------------------------------------------------------

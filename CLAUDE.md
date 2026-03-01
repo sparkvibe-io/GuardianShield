@@ -3,7 +3,7 @@
 GuardianShield is a universal AI security layer exposed as an MCP server.
 **Version**: 1.0.2 | **Tests**: 1362 | **Dependencies**: zero (stdlib only)
 
-## Available MCP Tools (19)
+## Available MCP Tools (21)
 
 ### Scanning
 - **scan_code**: Scan source code for vulnerabilities and hardcoded secrets (Python + JS/TS)
@@ -21,6 +21,10 @@ GuardianShield is a universal AI security layer exposed as an MCP server.
 - **mark_false_positive**: Mark a finding as false positive (flags future matches, annotates similar patterns)
 - **list_false_positives**: List active false positive records with optional scanner filter
 - **unmark_false_positive**: Remove a false positive record by fingerprint
+
+### Engine Management
+- **list_engines**: List available analysis engines with capabilities and enabled status
+- **set_engine**: Set which analysis engines are active for code scanning
 
 ### Configuration & Utilities
 - **get_profile**: View current safety profile
@@ -52,6 +56,7 @@ src/guardianshield/
 ├── findings.py      # Finding, Range, Remediation, Severity, FindingType
 ├── profiles.py      # SafetyProfile loader + 5 built-in profiles
 ├── scanner.py       # Code vulnerability scanner (language-aware)
+├── engines.py       # AnalysisEngine protocol, RegexEngine, EngineRegistry
 ├── patterns/        # Language-specific pattern sets
 │   ├── __init__.py  # Registry: LANGUAGE_PATTERNS, EXTENSION_MAP, REMEDIATION_MAP
 │   ├── common.py    # 3 cross-language patterns + remediation
@@ -69,7 +74,7 @@ src/guardianshield/
 ├── manifest.py      # Manifest file parser (11 formats, 4 ecosystems)
 ├── audit.py         # SQLite audit log
 ├── core.py          # GuardianShield orchestrator (scan_file, scan_directory, scan_dependencies_in_directory)
-└── mcp_server.py    # MCP server (19 tools, 3 resources, 2 prompts)
+└── mcp_server.py    # MCP server (21 tools, 3 resources, 2 prompts)
 ```
 
 ## Key Concepts
@@ -85,6 +90,7 @@ src/guardianshield/
 - **Manifest parsing**: `parse_manifest` auto-detects 11 formats; `scan_dependencies` walks directories to find and scan all manifests
 - **Version-aware CVE matching**: PEP 440 + semver parsing with affected range filtering (confidence 1.0 confirmed, 0.7 indeterminate)
 - **4 ecosystems**: PyPI, npm, Go, Packagist — all backed by local OSV.dev SQLite cache
+- **Analysis engines**: Pluggable `AnalysisEngine` protocol with `RegexEngine` (Phase 1); `EngineRegistry` per `GuardianShield` instance; `scan_code` delegates through enabled engines
 
 ## Development
 

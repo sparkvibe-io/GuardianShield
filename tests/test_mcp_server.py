@@ -96,7 +96,7 @@ class TestToolsList:
         ]
         responses = _capture_output(server, msgs)
         tools = responses[0]["result"]["tools"]
-        assert len(tools) == 19
+        assert len(tools) == 21
         names = {t["name"] for t in tools}
         assert names == {
             "scan_code", "scan_input", "scan_output", "check_secrets",
@@ -106,6 +106,7 @@ class TestToolsList:
             "scan_dependencies",
             "mark_false_positive", "list_false_positives",
             "unmark_false_positive",
+            "list_engines", "set_engine",
         }
 
 
@@ -1174,6 +1175,72 @@ class TestParseManifest:
                         "filename": "unknown.xyz",
                     },
                 },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+
+# ---------------------------------------------------------------------------
+# Engine tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestListEngines:
+    def test_list_engines(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "list_engines", "arguments": {}},
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        result = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert result["count"] == 1
+        assert len(result["engines"]) == 1
+        assert result["engines"][0]["name"] == "regex"
+        assert result["engines"][0]["enabled"] is True
+        assert "capabilities" in result["engines"][0]
+
+
+class TestSetEngine:
+    def test_set_engine_success(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "set_engine",
+                    "arguments": {"engines": ["regex"]},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        result = json.loads(responses[0]["result"]["content"][0]["text"])
+        assert result["engines"] == ["regex"]
+        assert "message" in result
+
+    def test_set_engine_unknown_errors(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {
+                    "name": "set_engine",
+                    "arguments": {"engines": ["nonexistent"]},
+                },
+            },
+        ]
+        responses = _capture_output(server, msgs)
+        assert responses[0]["result"]["isError"] is True
+
+    def test_set_engine_missing_param(self, tmp_path):
+        server = _make_server(tmp_path)
+        msgs = [
+            {
+                "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                "params": {"name": "set_engine", "arguments": {}},
             },
         ]
         responses = _capture_output(server, msgs)
