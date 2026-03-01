@@ -11,6 +11,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from guardianshield.enrichment import enrich_finding
 from guardianshield.findings import Finding, FindingType, Range, Severity
 
 # ---------------------------------------------------------------------------
@@ -237,20 +238,22 @@ def check_injection(text: str, sensitivity: str = "medium") -> list[Finding]:
 
             metadata: dict[str, Any] = {"injection_type": name}
 
-            findings.append(
-                Finding(
-                    finding_type=FindingType.PROMPT_INJECTION,
-                    severity=severity,
-                    message=description,
-                    matched_text=matched_text,
-                    line_number=line_number,
-                    scanner="injection_detector",
-                    metadata=metadata,
-                    range=range_obj,
-                    confidence=confidence,
-                    cwe_ids=list(cwe_ids),
-                )
+            finding = Finding(
+                finding_type=FindingType.PROMPT_INJECTION,
+                severity=severity,
+                message=description,
+                matched_text=matched_text,
+                line_number=line_number,
+                scanner="injection_detector",
+                metadata=metadata,
+                range=range_obj,
+                confidence=confidence,
+                cwe_ids=list(cwe_ids),
             )
+            finding.details["injection_type"] = name
+            finding.details["attack_vector"] = "prompt_injection"
+            enrich_finding(finding, source=text)
+            findings.append(finding)
 
     # Sort by line number for deterministic, readable output.
     findings.sort(key=lambda f: f.line_number)

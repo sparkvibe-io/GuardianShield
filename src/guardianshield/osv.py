@@ -26,6 +26,7 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
+from guardianshield.enrichment import build_references
 from guardianshield.findings import (
     Finding,
     FindingType,
@@ -658,25 +659,55 @@ def check_dependencies(
                         auto_fixable=True,
                     )
 
-                findings.append(
-                    Finding(
-                        finding_type=FindingType.DEPENDENCY_VULNERABILITY,
-                        severity=severity,
-                        message=message,
-                        matched_text=f"{dep.name}=={dep.version}",
-                        scanner="osv",
-                        confidence=confidence,
-                        cwe_ids=cwe_ids,
-                        remediation=remediation,
-                        metadata={
-                            "vuln_id": vuln["vuln_id"],
-                            "ecosystem": dep.ecosystem,
-                            "package": dep.name,
-                            "version": dep.version,
-                            "fixed_version": fixed,
-                            "aliases": aliases,
-                        },
-                    )
+                finding = Finding(
+                    finding_type=FindingType.DEPENDENCY_VULNERABILITY,
+                    severity=severity,
+                    message=message,
+                    matched_text=f"{dep.name}=={dep.version}",
+                    scanner="osv",
+                    confidence=confidence,
+                    cwe_ids=cwe_ids,
+                    remediation=remediation,
+                    metadata={
+                        "vuln_id": vuln["vuln_id"],
+                        "ecosystem": dep.ecosystem,
+                        "package": dep.name,
+                        "version": dep.version,
+                        "fixed_version": fixed,
+                        "aliases": aliases,
+                    },
                 )
+
+                # Enrich with structured details
+                # Build reference links from CWEs and CVE aliases
+                primary_vuln_id = None
+                for a in aliases:
+                    if a.startswith("CVE-"):
+                        primary_vuln_id = a
+                        break
+                if not primary_vuln_id:
+                    primary_vuln_id = vuln["vuln_id"]
+
+                finding.details = {
+                    "vulnerability_id": vuln["vuln_id"],
+                    "ecosystem": dep.ecosystem,
+                    "package": dep.name,
+                    "installed_version": dep.version,
+                    "fixed_version": fixed,
+                    "cvss_score": vuln.get("severity_score", 0),
+                    "published": vuln.get("published", ""),
+                    "references": build_references(
+                        cwe_ids, vuln_id=primary_vuln_id
+                    ),
+                    "match_explanation": (
+                        f"Package {dep.name} {dep.version} is affected by "
+                        f"{primary_vuln_id}"
+                        + (f" (fixed in {fixed})" if fixed else "")
+                        + f". {vuln.get('summary', '')}"
+                    ),
+                    "vulnerability_class": "dependency_vulnerability",
+                    "scanner": "osv",
+                }
+                findings.append(finding)
 
     return findings

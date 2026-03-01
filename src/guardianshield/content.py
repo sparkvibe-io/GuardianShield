@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 
+from guardianshield.enrichment import enrich_finding
 from guardianshield.findings import Finding, FindingType, Range, Severity
 
 # ---------------------------------------------------------------------------
@@ -284,25 +285,26 @@ def check_content(
                         end_col=match.end(),
                     )
 
-                    findings.append(
-                        Finding(
-                            finding_type=FindingType.CONTENT_VIOLATION,
-                            severity=sev,
-                            message=(
-                                f"Content violation detected: {category} "
-                                f"({description})"
-                            ),
-                            matched_text=matched_text,
-                            line_number=line_idx,
-                            scanner="content_moderator",
-                            metadata={
-                                "category": category,
-                                "pattern_name": description,
-                            },
-                            range=range_obj,
-                            confidence=confidence,
-                            cwe_ids=list(cwe_ids),
-                        )
+                    finding = Finding(
+                        finding_type=FindingType.CONTENT_VIOLATION,
+                        severity=sev,
+                        message=(
+                            f"Content violation detected: {category} "
+                            f"({description})"
+                        ),
+                        matched_text=matched_text,
+                        line_number=line_idx,
+                        scanner="content_moderator",
+                        metadata={
+                            "category": category,
+                            "pattern_name": description,
+                        },
+                        range=range_obj,
+                        confidence=confidence,
+                        cwe_ids=list(cwe_ids),
                     )
+                    finding.details["content_category"] = category
+                    enrich_finding(finding, source=text)
+                    findings.append(finding)
 
     return findings

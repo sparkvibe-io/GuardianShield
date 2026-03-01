@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 import re
 
+from guardianshield.enrichment import enrich_finding
 from guardianshield.findings import Finding, FindingType, Range, Remediation, Severity
 from guardianshield.patterns import (
     COMMON_PATTERNS,
@@ -144,21 +145,24 @@ def scan_code(
                     end_line=line_number - 1,
                     end_col=match.end(),
                 )
-                findings.append(
-                    Finding(
-                        finding_type=finding_type,
-                        severity=severity,
-                        message=description,
-                        matched_text=match.group(0),
-                        line_number=line_number,
-                        file_path=file_path,
-                        scanner="code_scanner",
-                        metadata={"pattern_name": name},
-                        range=range_obj,
-                        confidence=confidence,
-                        cwe_ids=list(cwe_ids),
-                        remediation=_REMEDIATION_CACHE.get(name),
-                    )
+                finding = Finding(
+                    finding_type=finding_type,
+                    severity=severity,
+                    message=description,
+                    matched_text=match.group(0),
+                    line_number=line_number,
+                    file_path=file_path,
+                    scanner="code_scanner",
+                    metadata={"pattern_name": name},
+                    range=range_obj,
+                    confidence=confidence,
+                    cwe_ids=list(cwe_ids),
+                    remediation=_REMEDIATION_CACHE.get(name),
                 )
+                finding.details["pattern_regex"] = pattern.pattern
+                if resolved_lang:
+                    finding.details["language"] = resolved_lang
+                enrich_finding(finding, source=code)
+                findings.append(finding)
 
     return findings

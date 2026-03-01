@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 
+from guardianshield.enrichment import enrich_finding
 from guardianshield.findings import Finding, FindingType, Range, Severity
 
 # ---------------------------------------------------------------------------
@@ -246,20 +247,25 @@ def check_secrets(
                     end_line=line_idx - 1,
                     end_col=match.end(),
                 )
-                findings.append(
-                    Finding(
-                        finding_type=FindingType.SECRET,
-                        severity=severity,
-                        message=description,
-                        matched_text=redacted,
-                        line_number=line_idx,
-                        file_path=file_path,
-                        scanner="secrets",
-                        metadata={"secret_type": name},
-                        range=range_obj,
-                        confidence=confidence,
-                        cwe_ids=list(cwe_ids),
-                    )
+                finding = Finding(
+                    finding_type=FindingType.SECRET,
+                    severity=severity,
+                    message=description,
+                    matched_text=redacted,
+                    line_number=line_idx,
+                    file_path=file_path,
+                    scanner="secrets",
+                    metadata={"secret_type": name},
+                    range=range_obj,
+                    confidence=confidence,
+                    cwe_ids=list(cwe_ids),
                 )
+                finding.details["secret_type"] = name
+                finding.details["exposure_risk"] = (
+                    "critical" if severity in (Severity.CRITICAL, Severity.HIGH)
+                    else "moderate"
+                )
+                enrich_finding(finding, source=text)
+                findings.append(finding)
 
     return findings

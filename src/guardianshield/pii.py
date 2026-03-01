@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 
+from guardianshield.enrichment import enrich_finding
 from guardianshield.findings import Finding, FindingType, Range, Severity
 
 # ---------------------------------------------------------------------------
@@ -190,20 +191,21 @@ def check_pii(
                     end_line=line_number - 1,
                     end_col=match.end(),
                 )
-                findings.append(
-                    Finding(
-                        finding_type=FindingType.PII_LEAK,
-                        severity=severity,
-                        message=f"{description} in line {line_number}",
-                        matched_text=_redact(pii_type),
-                        line_number=line_number,
-                        scanner="pii_detector",
-                        metadata={"pii_type": pii_type},
-                        range=range_obj,
-                        confidence=confidence,
-                        cwe_ids=list(cwe_ids),
-                    )
+                finding = Finding(
+                    finding_type=FindingType.PII_LEAK,
+                    severity=severity,
+                    message=f"{description} in line {line_number}",
+                    matched_text=_redact(pii_type),
+                    line_number=line_number,
+                    scanner="pii_detector",
+                    metadata={"pii_type": pii_type},
+                    range=range_obj,
+                    confidence=confidence,
+                    cwe_ids=list(cwe_ids),
                 )
+                finding.details["pii_type"] = pii_type
+                enrich_finding(finding, source=text)
+                findings.append(finding)
 
     return findings
 
