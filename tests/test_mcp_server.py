@@ -1197,11 +1197,13 @@ class TestListEngines:
         ]
         responses = _capture_output(server, msgs)
         result = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert result["count"] == 1
-        assert len(result["engines"]) == 1
-        assert result["engines"][0]["name"] == "regex"
-        assert result["engines"][0]["enabled"] is True
-        assert "capabilities" in result["engines"][0]
+        assert result["count"] == 2
+        assert len(result["engines"]) == 2
+        engine_names = {e["name"] for e in result["engines"]}
+        assert engine_names == {"regex", "deep"}
+        regex_entry = next(e for e in result["engines"] if e["name"] == "regex")
+        assert regex_entry["enabled"] is True
+        assert "capabilities" in regex_entry
 
 
 class TestSetEngine:

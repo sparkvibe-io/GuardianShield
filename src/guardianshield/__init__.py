@@ -24,6 +24,7 @@ __version__ = "1.1.0b1"
 from .config import ProjectConfig, discover_config
 from .core import GuardianShield
 from .dedup import DedupResult, FindingDeduplicator
+from .deep_engine import DeepEngine
 from .engines import AnalysisEngine, EngineRegistry, RegexEngine
 from .enrichment import enrich_finding
 from .feedback import FalsePositiveDB
@@ -50,6 +51,7 @@ __all__ = [
     "__version__",
     "AnalysisEngine",
     "DedupResult",
+    "DeepEngine",
     "Dependency",
     "EngineRegistry",
     "FalsePositiveDB",

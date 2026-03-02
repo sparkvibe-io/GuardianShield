@@ -18,6 +18,7 @@ from . import __version__
 from .audit import AuditLog
 from .config import ProjectConfig
 from .content import check_content
+from .deep_engine import DeepEngine
 from .engines import AnalysisEngine, EngineRegistry, RegexEngine
 from .feedback import FalsePositiveDB
 from .findings import Finding
@@ -61,6 +62,7 @@ class GuardianShield:
         self._feedback_db = feedback_db
         self._engine_registry = EngineRegistry()
         self._engine_registry.register(RegexEngine())
+        self._engine_registry.register(DeepEngine())
 
     # ------------------------------------------------------------------
     # Helpers
