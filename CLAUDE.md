@@ -1,7 +1,7 @@
 # GuardianShield — AI Agent Instructions
 
 GuardianShield is a universal AI security layer exposed as an MCP server.
-**Version**: 1.1.0-beta.1 | **Tests**: 1396 | **Dependencies**: zero (stdlib only)
+**Version**: 1.1.0-beta.1 | **Tests**: 1463 | **Dependencies**: zero (stdlib only)
 
 ## Available MCP Tools (21)
 
@@ -57,6 +57,7 @@ src/guardianshield/
 ├── profiles.py      # SafetyProfile loader + 5 built-in profiles
 ├── scanner.py       # Code vulnerability scanner (language-aware)
 ├── engines.py       # AnalysisEngine protocol, RegexEngine, EngineRegistry
+├── deep_engine.py   # DeepEngine: cross-line taint tracking (ast for Python, regex for JS)
 ├── patterns/        # Language-specific pattern sets
 │   ├── __init__.py  # Registry: LANGUAGE_PATTERNS, EXTENSION_MAP, REMEDIATION_MAP
 │   ├── common.py    # 3 cross-language patterns + remediation
@@ -95,7 +96,8 @@ src/guardianshield/
 - **Manifest parsing**: `parse_manifest` auto-detects 11 formats; `scan_dependencies` walks directories to find and scan all manifests
 - **Version-aware CVE matching**: PEP 440 + semver parsing with affected range filtering (confidence 1.0 confirmed, 0.7 indeterminate)
 - **4 ecosystems**: PyPI, npm, Go, Packagist — all backed by local OSV.dev SQLite cache
-- **Analysis engines**: Pluggable `AnalysisEngine` protocol with `RegexEngine` (Phase 1); `EngineRegistry` per `GuardianShield` instance; `scan_code` delegates through enabled engines
+- **Analysis engines**: Pluggable `AnalysisEngine` protocol with `RegexEngine` (line-by-line patterns) and `DeepEngine` (cross-line taint tracking); `EngineRegistry` per `GuardianShield` instance; `scan_code` delegates through enabled engines; default engines: `["regex"]`
+- **DeepEngine**: 5-phase taint analysis — assignment extraction (Python AST / JS regex), source identification (19 Python + 10 JS patterns), multi-pass propagation (max 5, scope-aware), sink detection (12 Python + 10 JS sinks), finding conversion with confidence 0.70–0.90
 - **Graceful audit degradation**: `_log()` catches all exceptions so scans succeed even when audit DB is unwritable
 - **scan_dependencies_in_directory**: Returns `(findings, metadata)` tuple — metadata contains `manifests_found` and `dependency_count` directly (no audit log round-trip)
 
@@ -103,7 +105,7 @@ src/guardianshield/
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 1396 tests
+pytest tests/ -v          # 1463 tests
 ruff check src/ tests/    # Linting
 ```
 
