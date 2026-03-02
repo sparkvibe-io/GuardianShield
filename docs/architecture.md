@@ -27,7 +27,7 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
     |-- check_secrets()  -> secrets.py                           -> Finding[]
     |-- check_deps()     -> osv.py -> SQLite cache               -> Finding[]
     |
-    |-- [EngineRegistry]  <- engines.py (RegexEngine + pluggable)
+    |-- [EngineRegistry]  <- engines.py (RegexEngine) + deep_engine.py (DeepEngine)
     |-- [AuditLog]       -> SQLite (audit.py)
     |-- [ProjectConfig]  <- config.py (.guardianshield.json/yaml)
     |-- [Deduplicator]   <- dedup.py (SHA-256 fingerprints)
@@ -60,6 +60,10 @@ Detects insecure code patterns using compiled regular expressions. Delegates to 
 ### `engines.py` — Analysis Engine Framework
 
 Defines the `AnalysisEngine` Protocol for pluggable analysis strategies and the `EngineRegistry` for managing them. Ships with `RegexEngine`, which wraps `scanner.scan_code()` and tags findings with `details["engine"] = "regex"`. Each `GuardianShield` instance owns its own registry, and engines can be selected per-scan or per-session via `set_engine`.
+
+### `deep_engine.py` — Deep Analysis Engine
+
+Cross-line taint tracking engine that traces data flow from untrusted sources to dangerous sinks across multiple lines and function boundaries. Implements a 5-phase analysis: (1) assignment extraction using Python's `ast` module or regex for JS/TS, (2) source identification via 19 Python and 10 JS/TS taint source patterns, (3) scope-aware multi-pass propagation (up to 5 passes), (4) sink detection against 12 Python and 10 JS/TS sink patterns, and (5) finding conversion with confidence scores from 0.70 to 0.90. Uses only the Python standard library — `ast` for Python analysis, regex for JS/TS. Registered alongside `RegexEngine` in each `GuardianShield` instance but not enabled by default (`["regex"]` is the default engine set).
 
 ### `secrets.py` — Secret & Credential Detector
 
@@ -164,8 +168,10 @@ The following walkthrough traces what happens when a client calls the `scan_code
    |                                |
    |                                |-- Checks active profile config
    |                                |
-   |                             5. Scanner layer
-   |                                |-- scanner.scan_code(text)
+   |                             5. Engine delegation
+   |                                |-- EngineRegistry.enabled_engines()
+   |                                |   |-- RegexEngine -> scanner.scan_code(text)
+   |                                |   '-- DeepEngine -> taint tracking (if enabled)
    |                                |-- secrets.check_secrets(text)
    |                                |
    |                             6. Combines Finding[] results
@@ -185,7 +191,7 @@ The following walkthrough traces what happens when a client calls the `scan_code
 
 4. **Core checks active profile** — The orchestrator reads the active `SafetyProfile` to determine which scanners are enabled and their sensitivity levels.
 
-5. **Scanners execute** — The core calls `scanner.scan_code()` for vulnerability detection and `secrets.check_secrets()` for credential detection. If a `file_path` or `language` is provided, the scanner loads the appropriate language-specific patterns from the `patterns/` package (auto-detected from extension via `EXTENSION_MAP`). Each scanner returns a list of `Finding` objects with LSP ranges, confidence scores, CWE IDs, and remediation suggestions.
+5. **Engines execute** — The core delegates to enabled analysis engines via the `EngineRegistry`. By default, only the `RegexEngine` is enabled — it calls `scanner.scan_code()` for line-by-line pattern matching. When the `DeepEngine` is also enabled, it performs cross-line taint tracking to catch data flow vulnerabilities that span multiple lines. Secret detection (`secrets.check_secrets()`) always runs regardless of engine selection. If a `file_path` or `language` is provided, the scanner loads the appropriate language-specific patterns from the `patterns/` package (auto-detected from extension via `EXTENSION_MAP`). Each engine returns a list of `Finding` objects with LSP ranges, confidence scores, CWE IDs, and remediation suggestions.
 
 6. **Findings are combined and logged** — The core merges all findings, deduplicates if necessary, and writes an audit record to the SQLite database. The audit record contains the SHA-256 hash of the input — never the raw text.
 
@@ -204,6 +210,7 @@ GuardianShield/
 |       |-- core.py              # Orchestrator — routes scans through scanners
 |       |-- scanner.py           # Code vulnerability scanner (uses patterns/)
 |       |-- engines.py           # AnalysisEngine protocol, RegexEngine, EngineRegistry
+|       |-- deep_engine.py      # DeepEngine: cross-line taint tracking (ast + regex)
 |       |-- patterns/            # Language-specific vulnerability patterns
 |       |   |-- __init__.py      # Registry: LANGUAGE_PATTERNS, EXTENSION_MAP, REMEDIATION_MAP
 |       |   |-- common.py        # 3 cross-language patterns + remediation
@@ -249,7 +256,9 @@ GuardianShield/
 |   |-- test_pii.py
 |   |-- test_profiles.py
 |   |-- test_scanner.py
-|   '-- test_secrets.py
+|   |-- test_secrets.py
+|   |-- test_engines.py          # Engine framework tests
+|   '-- test_deep_engine.py      # DeepEngine taint tracking tests
 |-- docs/                        # MkDocs Material documentation
 |-- .github/workflows/           # CI/CD pipelines
 |-- mkdocs.yml                   # MkDocs configuration

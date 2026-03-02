@@ -82,6 +82,7 @@ scan_code(
     code: str,
     file_path: str | None = None,
     language: str | None = None,
+    engines: list[str] | None = None,
 ) -> list[Finding]
 ```
 
@@ -90,6 +91,7 @@ scan_code(
 | `code` | `str` | -- | The source code to scan. |
 | `file_path` | `str \| None` | `None` | Optional file path for context in findings. |
 | `language` | `str \| None` | `None` | Programming language hint (e.g. `"python"`, `"javascript"`). |
+| `engines` | `list[str] \| None` | `None` | Analysis engines to use for this scan. `None` uses the session default (set via `set_engines()`). Available engines: `"regex"` (line-by-line patterns) and `"deep"` (cross-line taint tracking). |
 
 **Returns:** `list[Finding]` -- all detected vulnerabilities and secrets.
 
@@ -321,6 +323,104 @@ close() -> None
 |---|---|---|
 | `profile` | `SafetyProfile` | The currently active safety profile (read-only). |
 | `project_config` | `ProjectConfig \| None` | The active project configuration, if any (read-only). |
+
+#### `list_engines`
+
+List all registered analysis engines with their enabled status and capabilities.
+
+```python
+list_engines() -> list[dict]
+```
+
+**Returns:** `list[dict]` -- each dict contains `name`, `enabled`, and `capabilities`.
+
+---
+
+#### `set_engines`
+
+Set which analysis engines are active for code scanning in the current session.
+
+```python
+set_engines(names: list[str]) -> list[str]
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `names` | `list[str]` | -- | Engine names to enable (e.g. `["regex"]` or `["regex", "deep"]`). |
+
+**Returns:** `list[str]` -- the updated list of enabled engine names.
+
+**Raises:** `ValueError` if any name is not a registered engine.
+
+---
+
+#### `register_engine`
+
+Register a custom analysis engine. The engine must implement the `AnalysisEngine` protocol.
+
+```python
+register_engine(engine: AnalysisEngine) -> None
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `engine` | `AnalysisEngine` | -- | An object implementing the `AnalysisEngine` protocol. |
+
+---
+
+### Engine Properties
+
+| Property | Type | Description |
+|---|---|---|
+| `engine_registry` | `EngineRegistry` | The engine registry for this instance (read-only). |
+
+---
+
+## AnalysisEngine
+
+::: guardianshield.engines.AnalysisEngine
+
+A `Protocol` (runtime-checkable) defining the interface for pluggable analysis engines.
+
+```python
+class AnalysisEngine(Protocol):
+    @property
+    def name(self) -> str: ...
+
+    def analyze(
+        self,
+        code: str,
+        language: str | None = None,
+        sensitivity: str = "medium",
+    ) -> list[Finding]: ...
+
+    @property
+    def capabilities(self) -> dict[str, Any]: ...
+```
+
+Any object implementing these three members can be registered as an analysis engine. GuardianShield ships with two built-in engines: `RegexEngine` and `DeepEngine`.
+
+---
+
+## DeepEngine
+
+::: guardianshield.deep_engine.DeepEngine
+
+Cross-line taint tracking engine that traces data flow from untrusted sources (e.g. `request.args`, `input()`) to dangerous sinks (e.g. shell execution, code execution functions).
+
+```python
+from guardianshield import DeepEngine
+
+engine = DeepEngine()
+findings = engine.analyze(code, language="python")
+```
+
+| Property | Value |
+|---|---|
+| `name` | `"deep"` |
+| Supported languages | Python (via `ast`), JavaScript/TypeScript (via regex) |
+| Confidence range | 0.70 -- 0.90 |
+| Dependencies | None (stdlib only) |
 
 ---
 
