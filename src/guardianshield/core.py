@@ -28,8 +28,10 @@ from .osv import Dependency, OsvCache
 from .osv import check_dependencies as _check_dependencies
 from .patterns import EXTENSION_MAP
 from .pii import check_pii
+from .pipeline import EngineTimingResult, merge_engine_findings, timed_analyze
 from .profiles import SafetyProfile, list_profiles, load_profile
 from .secrets import check_secrets
+from .semantic_engine import SemanticEngine
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +65,8 @@ class GuardianShield:
         self._engine_registry = EngineRegistry()
         self._engine_registry.register(RegexEngine())
         self._engine_registry.register(DeepEngine())
+        self._engine_registry.register(SemanticEngine())
+        self._engine_timings: list[EngineTimingResult] = []
 
     # ------------------------------------------------------------------
     # Helpers
@@ -196,6 +200,10 @@ class GuardianShield:
         """Scan source code for vulnerabilities and hardcoded secrets.
 
         Combines the code vulnerability scanner and the secret detector.
+        When multiple engines are active, findings are merged (deduplicated)
+        and confidence is boosted for multi-engine confirmations.  If the
+        ``"semantic"`` engine is enabled, confidence is adjusted based on
+        code structure (test files, dead code, exception handlers, etc.).
 
         Args:
             code: Source code to scan.
@@ -206,20 +214,41 @@ class GuardianShield:
                 profile's ``code_scanner.engines``.
         """
         findings: list[Finding] = []
+        timings: list[EngineTimingResult] = []
 
         cfg = self._profile.code_scanner
         if cfg.enabled:
             engine_names = engines if engines is not None else cfg.engines
             active_engines = self._engine_registry.enabled_engines(engine_names)
+
+            # Run analysis engines (skip "semantic" — it's a post-processor).
             for engine in active_engines:
-                findings.extend(
-                    engine.analyze(
-                        code,
-                        language=language,
-                        sensitivity=cfg.sensitivity,
-                        file_path=file_path,
-                    )
+                if engine.name == "semantic":
+                    continue
+                engine_findings, timing = timed_analyze(
+                    engine,
+                    code,
+                    language=language,
+                    sensitivity=cfg.sensitivity,
+                    file_path=file_path,
                 )
+                findings.extend(engine_findings)
+                timings.append(timing)
+
+            # Merge duplicates from multiple engines.
+            findings = merge_engine_findings(findings)
+
+            # SemanticEngine post-processing (if enabled).
+            if "semantic" in engine_names:
+                semantic = self._engine_registry._engines.get("semantic")
+                if semantic is not None and hasattr(semantic, "adjust_findings"):
+                    detected_lang = language
+                    if detected_lang is None and file_path is not None:
+                        ext = os.path.splitext(file_path)[1].lower()
+                        detected_lang = EXTENSION_MAP.get(ext)
+                    semantic.adjust_findings(
+                        findings, code, language=detected_lang, file_path=file_path,
+                    )
 
         sec_cfg = self._profile.secret_scanner
         if sec_cfg.enabled:
@@ -231,6 +260,7 @@ class GuardianShield:
                 )
             )
 
+        self._engine_timings = timings
         self._annotate_fps(findings)
         self._log("code", code, findings, {"file_path": file_path})
         return findings
@@ -681,6 +711,8 @@ class GuardianShield:
         result["engines"] = self._engine_registry.list_engines(
             enabled_names=self._profile.code_scanner.engines,
         )
+        if self._engine_timings:
+            result["engine_timings"] = [t.to_dict() for t in self._engine_timings]
         if self._project_config:
             result["project_config"] = self._project_config.to_dict()
         # Include false positive feedback stats if DB is available.

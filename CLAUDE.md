@@ -1,7 +1,7 @@
 # GuardianShield — AI Agent Instructions
 
 GuardianShield is a universal AI security layer exposed as an MCP server.
-**Version**: 1.1.0 | **Tests**: 1463 | **Dependencies**: zero (stdlib only)
+**Version**: 1.1.0 | **Tests**: 1627 | **Dependencies**: zero (stdlib only)
 
 ## Available MCP Tools (21)
 
@@ -58,6 +58,9 @@ src/guardianshield/
 ├── scanner.py       # Code vulnerability scanner (language-aware)
 ├── engines.py       # AnalysisEngine protocol, RegexEngine, EngineRegistry
 ├── deep_engine.py   # DeepEngine: cross-line taint tracking (ast for Python, regex for JS)
+├── semantic_engine.py # SemanticEngine: structure-aware confidence adjustment
+├── pipeline.py      # Result pipeline: multi-engine merge, dedup, timing
+├── triage.py        # CWE-specific triage prompts for AI-assisted FP filtering
 ├── patterns/        # Language-specific pattern sets
 │   ├── __init__.py  # Registry: LANGUAGE_PATTERNS, EXTENSION_MAP, REMEDIATION_MAP
 │   ├── common.py    # 3 cross-language patterns + remediation
@@ -96,8 +99,11 @@ src/guardianshield/
 - **Manifest parsing**: `parse_manifest` auto-detects 11 formats; `scan_dependencies` walks directories to find and scan all manifests
 - **Version-aware CVE matching**: PEP 440 + semver parsing with affected range filtering (confidence 1.0 confirmed, 0.7 indeterminate)
 - **4 ecosystems**: PyPI, npm, Go, Packagist — all backed by local OSV.dev SQLite cache
-- **Analysis engines**: Pluggable `AnalysisEngine` protocol with `RegexEngine` (line-by-line patterns) and `DeepEngine` (cross-line taint tracking); `EngineRegistry` per `GuardianShield` instance; `scan_code` delegates through enabled engines; default engines: `["regex"]`
+- **Analysis engines**: Pluggable `AnalysisEngine` protocol with `RegexEngine` (line-by-line patterns), `DeepEngine` (cross-line taint tracking), and `SemanticEngine` (confidence adjustment); `EngineRegistry` per `GuardianShield` instance; `scan_code` delegates through enabled engines; default engines: `["regex"]`
 - **DeepEngine**: 5-phase taint analysis — assignment extraction (Python AST / JS regex), source identification (19 Python + 10 JS patterns), multi-pass propagation (max 5, scope-aware), sink detection (12 Python + 10 JS sinks), finding conversion with confidence 0.70–0.90
+- **SemanticEngine**: Post-processing confidence adjuster — test files (-0.3), dead code (-0.3), exception handlers (-0.15), uncalled functions (-0.2), unused imports (-0.25); cumulative with floor 0.1; Python AST + JS regex heuristics
+- **Result pipeline**: `merge_engine_findings()` deduplicates cross-engine findings by (file_path, line_number, finding_type), boosts confidence +0.1 per confirming engine; `timed_analyze()` wraps engines with timing; `EngineTimingResult` in `status()`
+- **CWE-specific triage prompts**: `triage.py` provides 7 vulnerability-type triage guides (SQL injection, XSS, command injection, path traversal, insecure function, insecure pattern, secret) with true/false positive indicators, targeted questions, and context guidance. Exposed as `triage-finding` MCP prompt (3 prompts total). Zero telemetry — AI evaluates findings locally.
 - **Graceful audit degradation**: `_log()` catches all exceptions so scans succeed even when audit DB is unwritable
 - **scan_dependencies_in_directory**: Returns `(findings, metadata)` tuple — metadata contains `manifests_found` and `dependency_count` directly (no audit log round-trip)
 
@@ -105,7 +111,7 @@ src/guardianshield/
 
 ```bash
 pip install -e ".[dev]"
-pytest tests/ -v          # 1463 tests
+pytest tests/ -v          # 1627 tests
 ruff check src/ tests/    # Linting
 ```
 

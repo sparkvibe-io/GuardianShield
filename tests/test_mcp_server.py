@@ -133,9 +133,9 @@ class TestPromptsList:
         ]
         responses = _capture_output(server, msgs)
         prompts = responses[0]["result"]["prompts"]
-        assert len(prompts) == 2
+        assert len(prompts) == 3
         names = {p["name"] for p in prompts}
-        assert names == {"security-review", "compliance-check"}
+        assert names == {"security-review", "compliance-check", "triage-finding"}
 
 
 # ---------------------------------------------------------------------------
@@ -1197,10 +1197,10 @@ class TestListEngines:
         ]
         responses = _capture_output(server, msgs)
         result = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert result["count"] == 2
-        assert len(result["engines"]) == 2
+        assert result["count"] == 3
+        assert len(result["engines"]) == 3
         engine_names = {e["name"] for e in result["engines"]}
-        assert engine_names == {"regex", "deep"}
+        assert engine_names == {"regex", "deep", "semantic"}
         regex_entry = next(e for e in result["engines"] if e["name"] == "regex")
         assert regex_entry["enabled"] is True
         assert "capabilities" in regex_entry

@@ -40,6 +40,7 @@ from .core import GuardianShield
 from .manifest import parse_manifest
 from .osv import Dependency
 from .profiles import list_profiles
+from .triage import available_finding_types, build_triage_prompt
 
 # ---------------------------------------------------------------------------
 # Logging -- all output goes to stderr so stdout stays clean for JSON-RPC
@@ -602,6 +603,41 @@ PROMPTS: list[dict[str, Any]] = [
             },
         ],
     },
+    {
+        "name": "triage-finding",
+        "description": (
+            "Get CWE-specific triage guidance for evaluating a security finding. "
+            "Returns structured true/false positive indicators, targeted questions, "
+            "and context to examine — enabling AI-assisted false positive filtering "
+            "without telemetry."
+        ),
+        "arguments": [
+            {
+                "name": "finding_type",
+                "description": (
+                    "The finding type to triage (e.g. 'sql_injection', 'xss', "
+                    "'command_injection', 'path_traversal', 'insecure_function', "
+                    "'insecure_pattern', 'secret')."
+                ),
+                "required": True,
+            },
+            {
+                "name": "code",
+                "description": "Source code surrounding the finding for analysis.",
+                "required": False,
+            },
+            {
+                "name": "file_path",
+                "description": "File path for context (test files are more likely FPs).",
+                "required": False,
+            },
+            {
+                "name": "language",
+                "description": "Programming language of the code.",
+                "required": False,
+            },
+        ],
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -906,6 +942,48 @@ class GuardianShieldMCPServer:
                 ],
             }
 
+        elif prompt_name == "triage-finding":
+            finding_type = arguments.get("finding_type", "")
+            code = arguments.get("code", "")
+            file_path = arguments.get("file_path", "")
+            language = arguments.get("language", "")
+
+            if not finding_type:
+                return {
+                    "error": {
+                        "code": -32602,
+                        "message": (
+                            "Missing required argument: 'finding_type'. "
+                            f"Available types: {available_finding_types()}"
+                        ),
+                    },
+                }
+
+            try:
+                prompt_text = build_triage_prompt(
+                    finding_type=finding_type,
+                    code_snippet=code,
+                    file_path=file_path,
+                    language=language,
+                )
+            except ValueError as exc:
+                return {
+                    "error": {
+                        "code": -32602,
+                        "message": str(exc),
+                    },
+                }
+
+            return {
+                "description": f"CWE-specific triage guidance for {finding_type}",
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": {"type": "text", "text": prompt_text},
+                    }
+                ],
+            }
+
         else:
             return {
                 "error": {
@@ -1050,6 +1128,11 @@ class GuardianShieldMCPServer:
                 status["false_positives"] = self._shield.feedback_db.stats()
             except Exception:
                 status["false_positives"] = {"error": "unavailable"}
+        # Include engine timings from latest scan if available.
+        if self._shield._engine_timings:
+            status["engine_timings"] = [
+                t.to_dict() for t in self._shield._engine_timings
+            ]
         status["capabilities"] = [
             "scan_code", "scan_input", "scan_output", "check_secrets",
             "scan_file", "scan_directory", "test_pattern",

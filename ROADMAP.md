@@ -5,10 +5,13 @@
 
 ---
 
-## Current State (v1.0.2)
+## Current State (v1.1.0)
 
-- **19 MCP tools** | **1362 tests** | **Zero dependencies**
-- 7 language scanners (Python, JS/TS, Go, Java, Ruby, PHP, C#) with 83+ patterns
+- **21 MCP tools** | **~1550 tests** | **Zero dependencies**
+- 7 language scanners (Python, JS/TS, Go, Java, Ruby, PHP, C#) with 108+ patterns
+- 3 analysis engines: RegexEngine (pattern matching), DeepEngine (taint tracking),
+  SemanticEngine (confidence adjustment)
+- Result pipeline: multi-engine dedup, confidence merging, engine timing
 - Enriched finding details (code context, match explanations, CWE/OWASP references)
 - False positive feedback loop (per-project SQLite, pattern-level learning)
 - Local OSV.dev dependency scanner (PyPI, npm, Go, Packagist)
@@ -63,10 +66,10 @@ core.py (Orchestrator)
 │  └─────────────────────────────────────────────────┘    │
 │                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │ DeepEngine (built-in, new)                      │    │
+│  │ DeepEngine (built-in)                            │    │
 │  │                                                 │    │
-│  │ Cross-line analysis using lightweight AST-free  │    │
-│  │ data flow tracking:                             │    │
+│  │ Cross-line analysis using taint tracking        │    │
+│  │ (ast for Python, regex for JS/TS):              │    │
 │  │                                                 │    │
 │  │ - Variable assignment tracking (x = input())    │    │
 │  │ - Taint propagation (y = f"SELECT {x}")         │    │
@@ -76,35 +79,39 @@ core.py (Orchestrator)
 │  │ Strengths: Catches multi-line vulnerabilities   │    │
 │  │ Blind spots: No cross-file, no type inference   │    │
 │  │ Speed: ~10ms per 1K lines                       │    │
-│  │ Deps: Zero (stdlib only, no AST library)        │    │
+│  │ Deps: Zero (stdlib ast for Python, regex for JS) │    │
 │  └─────────────────────────────────────────────────┘    │
 │                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │ SemanticEngine (built-in, new)                  │    │
+│  │ SemanticEngine (built-in)                        │    │
 │  │                                                 │    │
-│  │ Structure-aware analysis using Python's ast     │    │
-│  │ module (stdlib) for Python code, and regex-     │    │
-│  │ based block detection for other languages:      │    │
+│  │ Structure-aware confidence adjustment using      │    │
+│  │ Python's ast (stdlib) and regex heuristics       │    │
+│  │ for JS/TS:                                      │    │
 │  │                                                 │    │
-│  │ - Function/class scope awareness                │    │
-│  │ - Import chain analysis                         │    │
-│  │ - Reachability from entry points                │    │
-│  │ - Context-aware confidence adjustment           │    │
-│  │   (e.g., test files get lower confidence)       │    │
+│  │ - Test file detection (-0.3 confidence)         │    │
+│  │ - Dead code detection (-0.3)                    │    │
+│  │ - Exception handler context (-0.15)             │    │
+│  │ - Uncalled function detection (-0.2)            │    │
+│  │ - Unused import detection (-0.25)               │    │
 │  │                                                 │    │
 │  │ Strengths: Reduces false positives via context  │    │
 │  │ Blind spots: Single-file only                   │    │
-│  │ Speed: ~50ms per 1K lines                       │    │
+│  │ Speed: fast (post-processing, no new findings)  │    │
 │  │ Deps: Zero (ast is stdlib for Python)           │    │
 │  └─────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────┘
     │
     ▼
-┌─── Result Pipeline ────────────────────────────────────┐
+┌─── Result Pipeline (pipeline.py) ──────────────────────┐
 │                                                         │
-│  1. Collect findings from all active engines            │
-│  2. Deduplicate (FindingDeduplicator)                   │
-│  3. Merge confidence scores (highest wins)              │
+│  1. Run engines with timed_analyze() (skip semantic)   │
+│  2. merge_engine_findings():                            │
+│     - Group by (file_path, line, finding_type)          │
+│     - Single-engine groups: pass through                │
+│     - Multi-engine groups: keep highest confidence,     │
+│       boost +0.1 per extra engine, merge evidence       │
+│  3. SemanticEngine.adjust_findings() (if enabled)       │
 │  4. Annotate with false positive feedback               │
 │  5. Return unified list[Finding]                        │
 │                                                         │
@@ -165,34 +172,90 @@ The `Finding.details` dict gains an `engine` field:
 
 ### Implementation Phases
 
-**Phase 1: Engine abstraction + RegexEngine wrapper**
+**Phase 1: Engine abstraction + RegexEngine wrapper** ✅ DONE (v1.1.0b1)
 - Define `AnalysisEngine` protocol
 - Wrap current `scanner.py` as `RegexEngine`
 - Add engine registry to core.py
 - Add `list_engines` MCP tool
 - All existing tests continue to pass
 
-**Phase 2: DeepEngine (cross-line data flow)**
-- Variable assignment tracker (regex-based, no AST)
+**Phase 2: DeepEngine (cross-line data flow)** ✅ DONE (v1.1.0b1)
+- Variable assignment tracking (ast for Python, regex for JS/TS)
 - Taint source identification (user input, request params, env vars)
 - Sink detection (SQL exec, shell exec, file write, response render)
 - Propagation through string formatting, concatenation, function args
-- New finding type or confidence boost for confirmed data flows
+- Confidence 0.70–0.90 based on TaintKind + chain length
 
-**Phase 3: SemanticEngine (structure-aware)**
-- Python: `ast` module for scope, imports, reachability
-- Other languages: regex-based block/function detection
-- Context-aware confidence adjustment
-- Test file detection (lower confidence for test code)
+**Phase 3: SemanticEngine (structure-aware)** ✅ DONE (v1.1.1)
+- Python: `ast` module for dead code, exception handlers, uncalled functions, unused imports
+- JS/TS: regex-based function/call/export detection
+- Test file detection via 11 path patterns (all languages)
+- Context-aware confidence adjustment (cumulative, floor 0.1)
 
-**Phase 4: Result pipeline**
-- Multi-engine dedup with confidence merging
-- Engine-specific evidence in `details`
-- Performance benchmarks and engine selection heuristics
+**Phase 4: Result pipeline** ✅ DONE (v1.1.1)
+- `merge_engine_findings()`: cross-engine dedup by (file, line, type)
+- Confidence boost (+0.1 per confirming engine, cap 1.0)
+- `timed_analyze()`: engine timing with `EngineTimingResult`
+- Engine evidence collection in `details["engine_evidence"]`
+- `status()` includes `engine_timings` from latest scan
 
 ---
 
-## v1.2 — Streamable HTTP Transport
+## v1.2 — AI-Assisted Triage + Developer Experience
+
+### Strategic Direction
+
+91%+ of SAST findings are false positives (Ghost Security, 2025). Traditional
+tools address this with either telemetry pipelines (privacy concerns, low
+adoption) or manual triage workflows (slow, error-prone). Neither works for
+AI-first development.
+
+GuardianShield's MCP architecture uniquely positions it to solve this
+differently: **the AI client already has full code context**. Instead of
+collecting feedback or phoning home, we teach the AI to triage findings using
+domain-specific knowledge — the same approach validated at scale by Semgrep
+Assistant (96% researcher agreement using Claude with CWE-specific context)
+and ZeroFalse (F1 > 0.95 with CWE-specialized prompts).
+
+### Features
+
+**CWE-Specific Triage Prompts** (MCP prompts)
+
+Structured per-vulnerability-type guidance that teaches the user's AI how to
+evaluate findings. Each triage prompt covers a specific CWE and includes:
+
+- True positive indicators (what makes this finding real)
+- False positive indicators (what makes this finding safe)
+- Specific questions to answer about the code context
+- What surrounding code to examine (sanitizers, validators, framework guards)
+
+Covered vulnerability types:
+- SQL injection (CWE-89)
+- Cross-site scripting / XSS (CWE-79)
+- Command injection (CWE-78)
+- Path traversal (CWE-22)
+- Insecure deserialization (CWE-502)
+- Hardcoded secrets (CWE-798)
+- Server-side request forgery / SSRF (CWE-918)
+- And more as patterns are added
+
+The AI client receives findings + triage prompts, applies them using its full
+view of the codebase, and returns only actionable results. No data leaves the
+developer's machine.
+
+**Inline Suppression** (planned)
+
+`# guardianshield:ignore` comments for intentional dismissals — lets developers
+mark known-safe patterns directly in source code.
+
+**SARIF Export** (planned)
+
+Standard SARIF output format for interoperability with GitHub Code Scanning,
+VS Code SARIF Viewer, and other tools in the security ecosystem.
+
+---
+
+## v1.3 — Streamable HTTP Transport
 
 Planned SSE-based HTTP transport for remote/centralized scenarios:
 
@@ -204,7 +267,7 @@ See `docs/architecture.md` for design notes.
 
 ---
 
-## v1.3 — Custom Pattern SDK
+## v1.4 — Custom Pattern SDK
 
 - User-defined pattern packs (load from `.guardianshield/patterns/`)
 - Pattern testing workflow (`test_pattern` tool already exists)
@@ -222,3 +285,5 @@ See `docs/architecture.md` for design notes.
    and tests never break.
 5. **Independent component** — GuardianShield is a black box. Clients send
    code in, get findings back. Internal strategy is an implementation detail.
+6. **Privacy-first** — No telemetry, no phone-home. False positive filtering
+   happens locally via AI triage prompts.
