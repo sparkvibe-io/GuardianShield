@@ -1,7 +1,7 @@
 # GuardianShield — AI Agent Instructions
 
 GuardianShield is a universal AI security layer exposed as an MCP server.
-**Version**: 1.1.0-beta.1 | **Tests**: 1463 | **Dependencies**: zero (stdlib only)
+**Version**: 1.1.0 | **Tests**: 1463 | **Dependencies**: zero (stdlib only)
 
 ## Available MCP Tools (21)
 

@@ -5,7 +5,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![Python](https://img.shields.io/pypi/pyversions/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![License](https://img.shields.io/github/license/sparkvibe-io/GuardianShield)](https://github.com/sparkvibe-io/GuardianShield/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1396%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1463%20passing-brightgreen)]()
 
 Universal AI security layer — an open-source MCP server for code scanning, PII detection, prompt injection defense, secret detection, dependency auditing, and audit logging.
 
@@ -14,6 +14,7 @@ Universal AI security layer — an open-source MCP server for code scanning, PII
 ## Features
 
 - **Code Vulnerability Scanning** — SQL injection, XSS, command injection, path traversal with CWE IDs and auto-fix remediation
+- **Cross-line Data Flow Analysis** — DeepEngine tracks tainted data from sources to sinks across multiple lines using AST-based taint propagation (Python) and regex (JS/TS)
 - **Dependency Security** — Version-aware CVE matching against OSV.dev for PyPI, npm, Go, and Packagist ecosystems
 - **Manifest Parsing** — Auto-detects 11 formats (requirements.txt, package.json, yarn.lock, go.mod, composer.json, and more)
 - **Prompt Injection Defense** — 9+ detection patterns for instruction override, role hijacking, ChatML injection
@@ -90,6 +91,8 @@ claude mcp add guardianshield -- guardianshield-mcp
 |------|-------------|
 | `list_engines` | List available analysis engines with capabilities |
 | `set_engine` | Set active analysis engines for code scanning |
+
+Two engines ship by default: `regex` (line-by-line pattern matching, enabled by default) and `deep` (cross-line taint tracking).
 
 ### Configuration & Utilities
 

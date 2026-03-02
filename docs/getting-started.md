@@ -94,6 +94,13 @@ findings = shield.scan_file("src/auth/login.py")
 findings = shield.scan_directory("src/", extensions=[".py", ".js"])
 ```
 
+For deeper analysis, enable the cross-line data flow engine:
+
+```python
+# Enable both regex patterns and cross-line taint tracking
+findings = shield.scan_code(code, language="python", engines=["regex", "deep"])
+```
+
 !!! tip "Five scanning surfaces"
     GuardianShield covers the full AI interaction lifecycle:
 

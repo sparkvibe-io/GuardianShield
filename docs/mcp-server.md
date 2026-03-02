@@ -164,6 +164,18 @@ Scan source code for security vulnerabilities, insecure patterns, and embedded s
     }
     ```
 
+!!! example "With cross-line data flow analysis"
+    ```json
+    {
+      "name": "scan_code",
+      "arguments": {
+        "code": "name = request.args.get('q')\ncursor.execute('SELECT * FROM t WHERE n=' + name)",
+        "language": "python",
+        "engines": ["regex", "deep"]
+      }
+    }
+    ```
+
 **Returns:** List of findings with severity, category, description, line number, and remediation advice.
 
 ---
@@ -551,7 +563,12 @@ Remove a false positive record by its fingerprint. The finding will no longer be
 
 ### `list_engines`
 
-List available analysis engines with their capabilities and enabled status. Engines are pluggable analysis strategies — the default `regex` engine uses pattern matching.
+List available analysis engines with their capabilities and enabled status. Two engines are registered by default:
+
+| Engine | Type | Description |
+|--------|------|-------------|
+| `regex` | Line-by-line pattern matching | 108+ compiled regex patterns across 7 languages. Fast, low false-positive rate. Default engine. |
+| `deep` | Cross-line taint tracking | Traces data flow from untrusted sources to dangerous sinks across multiple lines. Uses Python `ast` for Python and regex for JS/TS. |
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -577,15 +594,20 @@ Set which analysis engines are active for code scanning in the current session. 
 |-----------|------------|----------|--------------------------------------|
 | `engines` | `string[]` | Yes      | List of engine names to enable       |
 
-!!! example "Example call"
+!!! example "Enable both engines"
     ```json
     {
       "name": "set_engine",
       "arguments": {
-        "engines": ["regex"]
+        "engines": ["regex", "deep"]
       }
     }
     ```
+
+!!! tip "When to use each engine"
+    - **`regex` only** (default) — Fast line-by-line scanning. Best for quick feedback during development.
+    - **`deep` only** — Cross-line taint tracking. Best for thorough security review of critical code paths.
+    - **Both** — Maximum coverage. Combines pattern matching with data flow analysis. May produce more findings.
 
 **Returns:** Confirmation with the updated list of enabled engines.
 
@@ -732,7 +754,7 @@ The client sends `initialize` to negotiate capabilities, then confirms with `ini
     },
     "serverInfo": {
       "name": "guardianshield",
-      "version": "1.1.0b1"
+      "version": "1.1.0"
     }
   }
 }

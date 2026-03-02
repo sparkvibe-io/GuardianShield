@@ -117,6 +117,10 @@ GuardianShield sits between your AI agent and your codebase, scanning every inte
     <h4><span class="material-symbols-rounded ms-green">code</span> Language-Aware</h4>
     <p>108+ patterns across 7 languages (Python, JS/TS, Go, Java, Ruby, PHP, C#) with CWE mapping — auto-detected from file extension.</p>
   </div>
+  <div class="shield-card">
+    <h4><span class="material-symbols-rounded ms-green">account_tree</span> Data Flow Analysis</h4>
+    <p>Cross-line taint tracking traces untrusted data from sources to dangerous sinks across multiple lines — catching vulnerabilities regex alone can't see.</p>
+  </div>
 </div>
 
 </div>
@@ -399,10 +403,11 @@ Pre-configured security policies for different industries and use cases. Switch 
 | Response Redaction | — | — | — | — | **:material-check-circle:{ .gs-check }** |
 | **Manifest Parsing** | — | — | — | — | **:material-check-circle:{ .gs-check }** |
 | **Directory Dep Scan** | — | — | — | — | **:material-check-circle:{ .gs-check }** |
-| **GuardianShield** | **1 of 16** | **2 of 16** | **2 of 16** | **1 of 16** | **16 of 16** |
+| **Cross-line Analysis** | — | — | — | — | **:material-check-circle:{ .gs-check }** |
+| **GuardianShield** | **1 of 17** | **2 of 17** | **2 of 17** | **1 of 17** | **17 of 17** |
 
 !!! info "Feature comparison"
-    The comparison above covers 16 functional categories. GuardianShield exposes **21 MCP tools** total — some categories (like dependency scanning) map to multiple tools.
+    The comparison above covers 17 functional categories. GuardianShield exposes **21 MCP tools** total — some categories (like dependency scanning) map to multiple tools.
 
 </div>
 
