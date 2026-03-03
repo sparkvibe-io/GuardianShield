@@ -47,6 +47,7 @@ from .mcp_server import GuardianShieldMCPServer
 from .osv import Dependency, OsvCache, check_dependencies
 from .pipeline import EngineTimingResult, merge_engine_findings
 from .profiles import SafetyProfile, ScannerConfig
+from .sarif import findings_to_sarif, findings_to_sarif_json
 from .semantic_engine import SemanticEngine, is_test_file
 from .triage import (
     available_finding_types,
@@ -81,6 +82,8 @@ __all__ = [
     "available_finding_types",
     "build_triage_prompt",
     "enrich_finding",
+    "findings_to_sarif",
+    "findings_to_sarif_json",
     "get_all_triage_guides",
     "get_triage_guide",
     "is_test_file",

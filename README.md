@@ -5,11 +5,11 @@
 [![PyPI version](https://img.shields.io/pypi/v/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![Python](https://img.shields.io/pypi/pyversions/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![License](https://img.shields.io/github/license/sparkvibe-io/GuardianShield)](https://github.com/sparkvibe-io/GuardianShield/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1627%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1707%20passing-brightgreen)]()
 
 Universal AI security layer — an open-source MCP server for code scanning, PII detection, prompt injection defense, secret detection, dependency auditing, and audit logging.
 
-**Zero dependencies** · **21 MCP tools** · **5 safety profiles** · **108+ detection patterns**
+**Zero dependencies** · **22 MCP tools** · **5 safety profiles** · **108+ detection patterns**
 
 ## Features
 

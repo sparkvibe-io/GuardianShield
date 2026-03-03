@@ -15,7 +15,7 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
 [Any MCP Client: Claude Code / VS Code / Cursor / etc.]
     |  JSON-RPC over stdin/stdout
     |
-[GuardianShieldMCPServer]         <- mcp_server.py (21 tools, 3 prompts)
+[GuardianShieldMCPServer]         <- mcp_server.py (22 tools, 3 prompts)
     |
 [GuardianShield core]             <- core.py (orchestrator)
     |
@@ -221,7 +221,7 @@ GuardianShield/
 |-- src/
 |   '-- guardianshield/
 |       |-- __init__.py          # Package init, public API exports
-|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (21 tools)
+|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (22 tools)
 |       |-- core.py              # Orchestrator — routes scans through scanners
 |       |-- scanner.py           # Code vulnerability scanner (uses patterns/)
 |       |-- engines.py           # AnalysisEngine protocol, RegexEngine, EngineRegistry

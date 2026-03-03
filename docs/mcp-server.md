@@ -5,7 +5,7 @@ description: Set up GuardianShield MCP server with Claude Code, VS Code, Cursor,
 
 # MCP Server Setup
 
-GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **21 tools**, **3 resources**, and **3 prompts** that any MCP-compatible AI client can discover and invoke automatically.
+GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **22 tools**, **3 resources**, and **3 prompts** that any MCP-compatible AI client can discover and invoke automatically.
 
 !!! info "What is MCP?"
     The [Model Context Protocol](https://modelcontextprotocol.io/) is an open standard that lets AI assistants discover and call external tools over a simple JSON-RPC transport. GuardianShield uses the **stdio** transport — the AI editor launches the server process and communicates through stdin/stdout.
@@ -72,7 +72,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Reload the window after saving. The Copilot agent will discover all 21 tools automatically.
+    Reload the window after saving. The Copilot agent will discover all 22 tools automatically.
 
 === "Cursor"
 
@@ -123,7 +123,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Restart Claude Desktop. The 21 tools, 3 resources, and 3 prompts will be available in the conversation.
+    Restart Claude Desktop. The 22 tools, 3 resources, and 3 prompts will be available in the conversation.
 
 === "Generic MCP Client"
 
@@ -612,6 +612,33 @@ Set which analysis engines are active for code scanning in the current session. 
     - **All three** — Maximum coverage with intelligent confidence adjustment. Combines pattern matching, data flow analysis, and structural context.
 
 **Returns:** Confirmation with the updated list of enabled engines.
+
+---
+
+### `export_sarif`
+
+Export scan findings as SARIF 2.1.0 JSON for GitHub Code Scanning, VS Code SARIF Viewer, and CI integration.
+
+| Parameter  | Type       | Required | Description                        |
+|------------|------------|----------|------------------------------------|
+| `code`     | `string`   | Yes      | Source code to scan                |
+| `language` | `string`   | Yes      | Programming language               |
+| `file_path`| `string`   | No       | File path for SARIF locations      |
+| `engines`  | `string[]` | No       | Analysis engines to use            |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "export_sarif",
+      "arguments": {
+        "code": "query = 'SELECT * FROM users WHERE id = ' + user_id",
+        "language": "python",
+        "file_path": "src/db.py"
+      }
+    }
+    ```
+
+**Returns:** SARIF 2.1.0 JSON string with `$schema`, `version`, `runs[].tool.driver`, `runs[].results`, and `runs[].taxonomies`. Compatible with `gh code-scanning upload-sarif`.
 
 ---
 
