@@ -1,6 +1,6 @@
 {
   "name": "guardianshield",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "displayName": "GuardianShield",
   "description": "Universal AI security layer — code scanning, PII detection, prompt injection defense, secret detection, dependency auditing, and audit logging.",
   "homepage": "https://github.com/sparkvibe-io/GuardianShield",
@@ -13,7 +13,7 @@
   "package": {
     "registry": "pypi",
     "name": "guardianshield",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "command": "guardianshield-mcp"
   },
   "tools": [

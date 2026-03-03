@@ -2,6 +2,14 @@
 
 All notable changes to GuardianShield are documented here.
 
+## [1.1.1] — 2026-03-03
+
+### Changed
+- Documentation updated for SemanticEngine, result pipeline, and CWE-specific triage prompts
+- ROADMAP rewritten as phased vision document (v1.2–v1.5) with cross-AI review findings
+- `server-card.json` includes `triage-finding` prompt
+- AI instruction files (CLAUDE.md, AGENTS.md) removed from version control
+
 ## [1.1.0] — 2026-03-02
 
 ### Added
