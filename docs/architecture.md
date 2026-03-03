@@ -15,7 +15,7 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
 [Any MCP Client: Claude Code / VS Code / Cursor / etc.]
     |  JSON-RPC over stdin/stdout
     |
-[GuardianShieldMCPServer]         <- mcp_server.py (21 tools)
+[GuardianShieldMCPServer]         <- mcp_server.py (21 tools, 3 prompts)
     |
 [GuardianShield core]             <- core.py (orchestrator)
     |
@@ -28,6 +28,9 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
     |-- check_deps()     -> osv.py -> SQLite cache               -> Finding[]
     |
     |-- [EngineRegistry]  <- engines.py (RegexEngine) + deep_engine.py (DeepEngine)
+    |                        + semantic_engine.py (SemanticEngine)
+    |-- [ResultPipeline] <- pipeline.py (merge, dedup, timing)
+    |-- [TriagePrompts]  <- triage.py (CWE-specific triage guides)
     |-- [AuditLog]       -> SQLite (audit.py)
     |-- [ProjectConfig]  <- config.py (.guardianshield.json/yaml)
     |-- [Deduplicator]   <- dedup.py (SHA-256 fingerprints)
@@ -64,6 +67,18 @@ Defines the `AnalysisEngine` Protocol for pluggable analysis strategies and the 
 ### `deep_engine.py` — Deep Analysis Engine
 
 Cross-line taint tracking engine that traces data flow from untrusted sources to dangerous sinks across multiple lines and function boundaries. Implements a 5-phase analysis: (1) assignment extraction using Python's `ast` module or regex for JS/TS, (2) source identification via 19 Python and 10 JS/TS taint source patterns, (3) scope-aware multi-pass propagation (up to 5 passes), (4) sink detection against 12 Python and 10 JS/TS sink patterns, and (5) finding conversion with confidence scores from 0.70 to 0.90. Uses only the Python standard library — `ast` for Python analysis, regex for JS/TS. Registered alongside `RegexEngine` in each `GuardianShield` instance but not enabled by default (`["regex"]` is the default engine set).
+
+### `semantic_engine.py` — Semantic Analysis Engine
+
+Structure-aware confidence adjustment engine that reduces false positives by analyzing code context. Uses Python's `ast` module for Python and regex heuristics for JS/TS. Detects test files (11 path patterns across all languages), dead code, exception handlers, uncalled functions, and unused imports. Each context type applies a confidence penalty (cumulative, floor 0.1). Implements the `AnalysisEngine` protocol but operates as a post-processor — `analyze()` returns an empty list while `adjust_findings()` modifies confidence scores on existing findings.
+
+### `pipeline.py` — Result Pipeline
+
+Multi-engine result pipeline that merges, deduplicates, and times findings from multiple analysis engines. `merge_engine_findings()` groups findings by coarse fingerprint (file_path + line_number + finding_type), passes through single-engine groups, and boosts confidence +0.1 per confirming engine for multi-engine groups (cap 1.0). `timed_analyze()` wraps engine execution with monotonic timing. `EngineTimingResult` dataclass tracks per-engine execution time, exposed via `status()`.
+
+### `triage.py` — CWE-Specific Triage Prompts
+
+Provides 7 vulnerability-type triage guides for AI-assisted false positive filtering. Each guide includes true positive indicators, false positive indicators, targeted questions to answer about the code, and guidance on what surrounding context to examine. Covers SQL injection (CWE-89), XSS (CWE-79), command injection (CWE-78), path traversal (CWE-22), insecure functions, insecure patterns, and hardcoded secrets (CWE-798). Exposed as the `triage-finding` MCP prompt. Zero telemetry — the AI evaluates findings locally using its full view of the codebase.
 
 ### `secrets.py` — Secret & Credential Detector
 
@@ -211,6 +226,9 @@ GuardianShield/
 |       |-- scanner.py           # Code vulnerability scanner (uses patterns/)
 |       |-- engines.py           # AnalysisEngine protocol, RegexEngine, EngineRegistry
 |       |-- deep_engine.py      # DeepEngine: cross-line taint tracking (ast + regex)
+|       |-- semantic_engine.py  # SemanticEngine: structure-aware confidence adjustment
+|       |-- pipeline.py         # Result pipeline: multi-engine merge, dedup, timing
+|       |-- triage.py           # CWE-specific triage prompts (7 vulnerability types)
 |       |-- patterns/            # Language-specific vulnerability patterns
 |       |   |-- __init__.py      # Registry: LANGUAGE_PATTERNS, EXTENSION_MAP, REMEDIATION_MAP
 |       |   |-- common.py        # 3 cross-language patterns + remediation

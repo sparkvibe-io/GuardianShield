@@ -5,7 +5,7 @@ description: Set up GuardianShield MCP server with Claude Code, VS Code, Cursor,
 
 # MCP Server Setup
 
-GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **21 tools**, **3 resources**, and **2 prompts** that any MCP-compatible AI client can discover and invoke automatically.
+GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **21 tools**, **3 resources**, and **3 prompts** that any MCP-compatible AI client can discover and invoke automatically.
 
 !!! info "What is MCP?"
     The [Model Context Protocol](https://modelcontextprotocol.io/) is an open standard that lets AI assistants discover and call external tools over a simple JSON-RPC transport. GuardianShield uses the **stdio** transport — the AI editor launches the server process and communicates through stdin/stdout.
@@ -123,7 +123,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Restart Claude Desktop. The 21 tools, 3 resources, and 2 prompts will be available in the conversation.
+    Restart Claude Desktop. The 21 tools, 3 resources, and 3 prompts will be available in the conversation.
 
 === "Generic MCP Client"
 
@@ -563,12 +563,13 @@ Remove a false positive record by its fingerprint. The finding will no longer be
 
 ### `list_engines`
 
-List available analysis engines with their capabilities and enabled status. Two engines are registered by default:
+List available analysis engines with their capabilities and enabled status. Three engines are registered:
 
 | Engine | Type | Description |
 |--------|------|-------------|
 | `regex` | Line-by-line pattern matching | 108+ compiled regex patterns across 7 languages. Fast, low false-positive rate. Default engine. |
 | `deep` | Cross-line taint tracking | Traces data flow from untrusted sources to dangerous sinks across multiple lines. Uses Python `ast` for Python and regex for JS/TS. |
+| `semantic` | Structure-aware confidence adjustment | Post-processing engine that adjusts confidence based on code context: test files, dead code, exception handlers, uncalled functions, unused imports. |
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -606,8 +607,9 @@ Set which analysis engines are active for code scanning in the current session. 
 
 !!! tip "When to use each engine"
     - **`regex` only** (default) — Fast line-by-line scanning. Best for quick feedback during development.
-    - **`deep` only** — Cross-line taint tracking. Best for thorough security review of critical code paths.
-    - **Both** — Maximum coverage. Combines pattern matching with data flow analysis. May produce more findings.
+    - **`regex` + `deep`** — Adds cross-line taint tracking. Best for thorough security review of critical code paths.
+    - **`regex` + `semantic`** — Adds context-aware confidence adjustment. Reduces false positives in test files and dead code.
+    - **All three** — Maximum coverage with intelligent confidence adjustment. Combines pattern matching, data flow analysis, and structural context.
 
 **Returns:** Confirmation with the updated list of enabled engines.
 
@@ -677,7 +679,7 @@ GuardianShield exposes 3 MCP resources. Resources provide read-only data that AI
 
 ## Prompts
 
-GuardianShield provides 2 MCP prompts. Prompts are reusable templates that AI clients can present to users or invoke programmatically.
+GuardianShield provides 3 MCP prompts. Prompts are reusable templates that AI clients can present to users or invoke programmatically.
 
 ### `security-review`
 
@@ -710,6 +712,33 @@ A compliance checking template. Structures the AI's analysis around regulatory f
       }
     }
     ```
+
+### `triage-finding`
+
+A CWE-specific triage template for evaluating whether a security finding is a true or false positive. Provides structured guidance with true positive indicators, false positive indicators, targeted questions, and context to examine.
+
+Supported vulnerability types: SQL injection (CWE-89), XSS (CWE-79), command injection (CWE-78), path traversal (CWE-22), insecure functions, insecure patterns, and hardcoded secrets (CWE-798).
+
+!!! example "Invoking the prompt"
+    ```json
+    {
+      "jsonrpc": "2.0",
+      "id": 6,
+      "method": "prompts/get",
+      "params": {
+        "name": "triage-finding",
+        "arguments": {
+          "finding_type": "sql_injection",
+          "code_snippet": "cursor.execute('SELECT * FROM users WHERE id=' + user_id)",
+          "file_path": "app/db.py",
+          "finding_message": "SQL injection via string concatenation"
+        }
+      }
+    }
+    ```
+
+!!! tip "When to use triage"
+    Use `triage-finding` after `scan_code` returns findings you want to validate. The triage prompt teaches the AI to evaluate each finding using domain-specific knowledge — no data leaves your machine.
 
 ---
 

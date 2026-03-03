@@ -83,7 +83,7 @@ src/guardianshield/
 ├── manifest.py      # Manifest file parser (11 formats, 4 ecosystems)
 ├── audit.py         # SQLite audit log
 ├── core.py          # GuardianShield orchestrator (scan_file, scan_directory, scan_dependencies_in_directory)
-└── mcp_server.py    # MCP server (21 tools, 3 resources, 2 prompts)
+└── mcp_server.py    # MCP server (21 tools, 3 resources, 3 prompts)
 ```
 
 ## Key Concepts

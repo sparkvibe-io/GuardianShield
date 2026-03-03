@@ -2,6 +2,26 @@
 
 All notable changes to GuardianShield are documented here.
 
+## [1.1.0] — 2026-03-02
+
+### Added
+- **Multi-engine analysis pipeline**: Pluggable `AnalysisEngine` protocol
+- **RegexEngine**: Existing scanner wrapped with engine tagging
+- **DeepEngine**: Cross-line taint tracking (Python `ast` + JS/TS regex). 19+10 source patterns, 12+10 sink patterns, confidence 0.70–0.90
+- **SemanticEngine**: Structure-aware confidence adjustment — test files (-0.3), dead code (-0.3), exception handlers (-0.15), uncalled functions (-0.2), unused imports (-0.25)
+- **Result pipeline**: `merge_engine_findings()` cross-engine dedup + confidence boost; `timed_analyze()` with `EngineTimingResult`
+- **CWE-specific triage prompts**: `triage-finding` MCP prompt for 7 vulnerability types
+- **Engine management**: `list_engines` and `set_engine` MCP tools
+- **Finding enrichment**: Code context, CWE/OWASP references in `details` dict
+- **False positive feedback**: Per-project SQLite with `mark_false_positive`, `list_false_positives`, `unmark_false_positive`
+- 5 new language pattern sets: Go (13), Java (12), Ruby (16), PHP (20), C# (22)
+
+### Changed
+- MCP tools: 16 → 21 | Prompts: 2 → 3 | Engines: 1 → 3
+- Patterns: 25 → 108+ (7 languages) | Tests: 934 → 1627
+- `scan_code` gains optional `engines` parameter
+- `shield_status` includes `engine_timings`
+
 ## [1.0.2] — 2026-02-28
 
 ### Fixed

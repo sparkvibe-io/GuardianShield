@@ -1,41 +1,26 @@
 # GuardianShield Roadmap
 
-> Living document tracking planned features, architecture evolution,
-> and release milestones. Updated as designs are validated.
+> Last updated: 2026-03-02
+>
+> Master vision document incorporating strategic feedback from cross-AI review
+> (Gemini CLI + Codex CLI, March 2026). Each phase builds on the previous,
+> maintaining zero dependencies and backward compatibility throughout.
 
 ---
 
 ## Current State (v1.1.0)
 
-- **21 MCP tools** | **~1550 tests** | **Zero dependencies**
-- 7 language scanners (Python, JS/TS, Go, Java, Ruby, PHP, C#) with 108+ patterns
-- 3 analysis engines: RegexEngine (pattern matching), DeepEngine (taint tracking),
-  SemanticEngine (confidence adjustment)
-- Result pipeline: multi-engine dedup, confidence merging, engine timing
-- Enriched finding details (code context, match explanations, CWE/OWASP references)
+- **21 MCP tools** | **3 prompts** | **1627 tests** | **Zero dependencies**
+- 3 analysis engines: RegexEngine, DeepEngine, SemanticEngine
+- 108+ detection patterns across 7 languages (Python, JS/TS, Go, Java, Ruby, PHP, C#)
+- CWE-specific triage prompts for AI-assisted false positive filtering
 - False positive feedback loop (per-project SQLite, pattern-level learning)
 - Local OSV.dev dependency scanner (PyPI, npm, Go, Packagist)
 - 5 safety profiles with per-scanner sensitivity control
 
 ---
 
-## v1.1 — Multi-Engine Analysis Pipeline
-
-### Vision
-
-Currently, all scanning uses a single strategy: **regex pattern matching**.
-This is fast and effective for known vulnerability shapes, but has blind spots:
-
-- Cannot track data flow across lines (e.g., a user input assigned on line 5,
-  used in a SQL query on line 20)
-- Cannot reason about code structure (e.g., whether a function is reachable
-  from an HTTP handler)
-- Cannot assess whether a matched pattern is actually exploitable in context
-
-v1.1 introduces **Analysis Engines** — pluggable scanning strategies that
-iterate through the same code, each adding findings from their perspective.
-Results are compiled, merged (deduplicated), and then annotated with false
-positive feedback before being returned to the client.
+## v1.1 — Multi-Engine Analysis Pipeline [RELEASED]
 
 ### Architecture
 
@@ -48,242 +33,248 @@ core.py (Orchestrator)
     ▼
 ┌─── AnalysisEngine (Protocol) ──────────────────────────┐
 │                                                         │
-│  class AnalysisEngine(Protocol):                        │
-│      name: str                                          │
-│      def analyze(code, language, sensitivity)            │
-│          -> list[Finding]                                │
-│      def capabilities() -> dict                         │
-│                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │ RegexEngine (built-in, default)                 │    │
-│  │                                                 │    │
-│  │ What it does today — compiled regex patterns    │    │
-│  │ per language, line-by-line matching.             │    │
-│  │                                                 │    │
-│  │ Strengths: Fast, deterministic, zero deps       │    │
-│  │ Blind spots: No cross-line, no data flow        │    │
-│  │ Speed: ~1ms per 1K lines                        │    │
+│  │ RegexEngine (default)                           │    │
+│  │ 108+ compiled patterns, line-by-line, ~1ms/1K   │    │
 │  └─────────────────────────────────────────────────┘    │
-│                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │ DeepEngine (built-in)                            │    │
-│  │                                                 │    │
-│  │ Cross-line analysis using taint tracking        │    │
-│  │ (ast for Python, regex for JS/TS):              │    │
-│  │                                                 │    │
-│  │ - Variable assignment tracking (x = input())    │    │
-│  │ - Taint propagation (y = f"SELECT {x}")         │    │
-│  │ - Sink detection (cursor.execute(y))            │    │
-│  │ - Cross-function flow (within same file)        │    │
-│  │                                                 │    │
-│  │ Strengths: Catches multi-line vulnerabilities   │    │
-│  │ Blind spots: No cross-file, no type inference   │    │
-│  │ Speed: ~10ms per 1K lines                       │    │
-│  │ Deps: Zero (stdlib ast for Python, regex for JS) │    │
+│  │ DeepEngine                                       │    │
+│  │ Cross-line taint tracking (ast + regex), ~10ms/1K│    │
 │  └─────────────────────────────────────────────────┘    │
-│                                                         │
 │  ┌─────────────────────────────────────────────────┐    │
-│  │ SemanticEngine (built-in)                        │    │
-│  │                                                 │    │
-│  │ Structure-aware confidence adjustment using      │    │
-│  │ Python's ast (stdlib) and regex heuristics       │    │
-│  │ for JS/TS:                                      │    │
-│  │                                                 │    │
-│  │ - Test file detection (-0.3 confidence)         │    │
-│  │ - Dead code detection (-0.3)                    │    │
-│  │ - Exception handler context (-0.15)             │    │
-│  │ - Uncalled function detection (-0.2)            │    │
-│  │ - Unused import detection (-0.25)               │    │
-│  │                                                 │    │
-│  │ Strengths: Reduces false positives via context  │    │
-│  │ Blind spots: Single-file only                   │    │
-│  │ Speed: fast (post-processing, no new findings)  │    │
-│  │ Deps: Zero (ast is stdlib for Python)           │    │
+│  │ SemanticEngine                                   │    │
+│  │ Confidence adjustment (test/dead/uncalled code)  │    │
 │  └─────────────────────────────────────────────────┘    │
 └─────────────────────────────────────────────────────────┘
     │
     ▼
-┌─── Result Pipeline (pipeline.py) ──────────────────────┐
-│                                                         │
-│  1. Run engines with timed_analyze() (skip semantic)   │
-│  2. merge_engine_findings():                            │
-│     - Group by (file_path, line, finding_type)          │
-│     - Single-engine groups: pass through                │
-│     - Multi-engine groups: keep highest confidence,     │
-│       boost +0.1 per extra engine, merge evidence       │
-│  3. SemanticEngine.adjust_findings() (if enabled)       │
-│  4. Annotate with false positive feedback               │
-│  5. Return unified list[Finding]                        │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
+┌─── Result Pipeline ──────────────────────────────────────┐
+│  1. timed_analyze() per engine                           │
+│  2. merge_engine_findings() — dedup + confidence boost   │
+│  3. SemanticEngine.adjust_findings()                     │
+│  4. False positive annotation                            │
+│  5. Return unified list[Finding]                         │
+└──────────────────────────────────────────────────────────┘
 ```
 
-### Scan Flow
+### Implementation Phases — All ✅ DONE
 
-When a scan is requested:
-
-1. **Engine selection** — The profile specifies which engines to run
-   (default: all enabled). Clients can override via an `engine` parameter.
-2. **Parallel execution** — Each engine analyzes the same code independently.
-3. **Result compilation** — Findings from all engines are collected into a
-   single list.
-4. **Deduplication** — If RegexEngine and DeepEngine both find the same
-   SQL injection on line 20, keep the one with higher confidence.
-5. **Confidence merging** — When DeepEngine confirms a RegexEngine finding
-   with data flow evidence, confidence is boosted.
-6. **FP annotation** — False positive feedback is applied last.
-7. **Return** — Client receives one unified `list[Finding]` regardless of
-   how many engines ran.
-
-### MCP Interface Changes
-
-New/modified tools:
-
-```
-list_engines        → Returns available engines, their capabilities, and status
-set_engine          → Enable/disable engines, set default engine for profile
-scan_code           → New optional "engines" param (list of engine names)
-shield_status       → Includes engine info in response
-```
-
-The `Finding.details` dict gains an `engine` field:
-```python
-{
-    "engine": "deep_engine",
-    "engine_evidence": "Data flows from user_input (line 5) to sql_query (line 20)",
-    ...existing fields...
-}
-```
-
-### Design Constraints
-
-- **Zero external dependencies** — All engines use Python stdlib only.
-  DeepEngine uses regex-based data flow. SemanticEngine uses `ast` (stdlib)
-  for Python, regex heuristics for other languages.
-- **Backward compatible** — Existing scans work exactly as before.
-  RegexEngine wraps the current `scanner.py` code. New engines are additive.
-- **Same Finding format** — Clients don't need to change. A finding from
-  DeepEngine looks identical to one from RegexEngine, just with richer
-  `details`.
-- **Profile-controlled** — Engine selection integrates with the existing
-  profile system. The `ScannerConfig` gains an `engines` field.
-- **Embedded storage** — Engine configurations, capabilities, and state
-  stored in SQLite. No external config files required.
-
-### Implementation Phases
-
-**Phase 1: Engine abstraction + RegexEngine wrapper** ✅ DONE (v1.1.0b1)
-- Define `AnalysisEngine` protocol
-- Wrap current `scanner.py` as `RegexEngine`
-- Add engine registry to core.py
-- Add `list_engines` MCP tool
-- All existing tests continue to pass
-
-**Phase 2: DeepEngine (cross-line data flow)** ✅ DONE (v1.1.0b1)
-- Variable assignment tracking (ast for Python, regex for JS/TS)
-- Taint source identification (user input, request params, env vars)
-- Sink detection (SQL exec, shell exec, file write, response render)
-- Propagation through string formatting, concatenation, function args
-- Confidence 0.70–0.90 based on TaintKind + chain length
-
-**Phase 3: SemanticEngine (structure-aware)** ✅ DONE (v1.1.1)
-- Python: `ast` module for dead code, exception handlers, uncalled functions, unused imports
-- JS/TS: regex-based function/call/export detection
-- Test file detection via 11 path patterns (all languages)
-- Context-aware confidence adjustment (cumulative, floor 0.1)
-
-**Phase 4: Result pipeline** ✅ DONE (v1.1.1)
-- `merge_engine_findings()`: cross-engine dedup by (file, line, type)
-- Confidence boost (+0.1 per confirming engine, cap 1.0)
-- `timed_analyze()`: engine timing with `EngineTimingResult`
-- Engine evidence collection in `details["engine_evidence"]`
-- `status()` includes `engine_timings` from latest scan
+- **Phase 1**: Engine abstraction + RegexEngine wrapper (v1.1.0b1)
+- **Phase 2**: DeepEngine — cross-line taint tracking (v1.1.0b1)
+- **Phase 3**: SemanticEngine — structure-aware confidence adjustment (v1.1.0)
+- **Phase 4**: Result pipeline — multi-engine merge, timing, confidence boost (v1.1.0)
+- **Phase 5**: CWE-specific triage prompts — 7 vulnerability types (v1.1.0)
 
 ---
 
-## v1.2 — AI-Assisted Triage + Developer Experience
+## v1.2 — Developer Experience & CI Integration
 
 ### Strategic Direction
 
-91%+ of SAST findings are false positives (Ghost Security, 2025). Traditional
-tools address this with either telemetry pipelines (privacy concerns, low
-adoption) or manual triage workflows (slow, error-prone). Neither works for
-AI-first development.
-
-GuardianShield's MCP architecture uniquely positions it to solve this
-differently: **the AI client already has full code context**. Instead of
-collecting feedback or phoning home, we teach the AI to triage findings using
-domain-specific knowledge — the same approach validated at scale by Semgrep
-Assistant (96% researcher agreement using Claude with CWE-specific context)
-and ZeroFalse (F1 > 0.95 with CWE-specialized prompts).
+Make GuardianShield the easiest SAST tool to adopt in CI/CD and daily development.
+Focus on output interoperability, developer workflow integration, and reducing
+friction for teams adopting security scanning.
 
 ### Features
 
-**CWE-Specific Triage Prompts** (MCP prompts)
+**SARIF Export** — Standard SARIF 2.1.0 output for GitHub Code Scanning, VS Code
+SARIF Viewer, and other security ecosystem tools. Enables first-class integration
+with GitHub's code scanning alerts UI.
 
-Structured per-vulnerability-type guidance that teaches the user's AI how to
-evaluate findings. Each triage prompt covers a specific CWE and includes:
+**Inline Suppression** — `# guardianshield:ignore[rule]` comments for intentional
+dismissals. Developers mark known-safe patterns directly in source code with
+required metadata: reason, owner, and optional `expires_at` for time-boxed
+suppressions.
 
-- True positive indicators (what makes this finding real)
-- False positive indicators (what makes this finding safe)
-- Specific questions to answer about the code context
-- What surrounding code to examine (sanitizers, validators, framework guards)
+**CI Quality Gates** — GitHub Actions templates with configurable thresholds
+(e.g., fail on any HIGH+, warn on MEDIUM). Pre-built workflow YAML that teams
+can drop into `.github/workflows/`.
 
-Covered vulnerability types:
-- SQL injection (CWE-89)
-- Cross-site scripting / XSS (CWE-79)
-- Command injection (CWE-78)
-- Path traversal (CWE-22)
-- Insecure deserialization (CWE-502)
-- Hardcoded secrets (CWE-798)
-- Server-side request forgery / SSRF (CWE-918)
-- And more as patterns are added
+**Baseline / Delta Scanning** — Scan only changed code (diff-based). Compare
+against a baseline scan to report only new findings, reducing noise in PRs.
 
-The AI client receives findings + triage prompts, applies them using its full
-view of the codebase, and returns only actionable results. No data leaves the
-developer's machine.
+**Structured JSON MCP Output** — Return findings as structured JSON objects
+instead of string-wrapped JSON in MCP text content blocks. Eliminates
+double-parsing on the client side.
 
-**Inline Suppression** (planned)
+**Bulk MCP APIs** — `scan_files` (multiple files), `scan_diff` (unified diff),
+`scan_pr` (GitHub PR number) for batch scanning workflows.
 
-`# guardianshield:ignore` comments for intentional dismissals — lets developers
-mark known-safe patterns directly in source code.
+### Design Constraints
 
-**SARIF Export** (planned)
-
-Standard SARIF output format for interoperability with GitHub Code Scanning,
-VS Code SARIF Viewer, and other tools in the security ecosystem.
+- SARIF output must be valid per the OASIS SARIF 2.1.0 spec
+- Inline suppression must be language-comment-aware (Python `#`, JS `//`, etc.)
+- CI templates must work without any GuardianShield-specific CI tooling
 
 ---
 
-## v1.3 — Streamable HTTP Transport
+## v1.3 — Analysis Depth & Accuracy
 
-Planned SSE-based HTTP transport for remote/centralized scenarios:
+### Strategic Direction
 
-- Team-wide policy enforcement from a shared GuardianShield instance
-- Centralized audit logging across multiple developers
-- The stdio transport remains the default for local development
+Deepen analysis capabilities and establish measurable accuracy benchmarks.
+Move from "good enough" pattern matching to verified precision/recall numbers
+that users can trust.
 
-See `docs/architecture.md` for design notes.
+### Features
+
+**Enhanced JS/TS Analysis** — Improved AST-level analysis for JavaScript and
+TypeScript (tree-sitter or improved regex-based AST). Close the gap between
+Python's `ast`-based analysis and JS/TS regex heuristics.
+
+**Inter-File Analysis** — Basic cross-file taint tracking. Follow data flow
+across imports within a project (single-repo scope). Start with Python's
+well-defined import system.
+
+**Precision/Recall Benchmark Suite** — Automated benchmarks against OWASP
+Benchmark, NIST Juliet Test Suite, and custom test corpora. Track P/R per
+vulnerability type per language across releases.
+
+**Richer Dedup Fingerprinting** — Add semantic context to finding fingerprints
+so that code reformatting doesn't create "new" findings. Reduce churn in
+delta scans.
+
+**IaC Scanning** — Infrastructure-as-code pattern detection for Terraform
+(`.tf`), Dockerfiles, and Kubernetes YAML. Detect publicly exposed ports,
+overprivileged IAM, unencrypted storage.
+
+### Design Constraints
+
+- Cross-file analysis must remain stdlib-only (no tree-sitter C bindings)
+- Benchmarks must be reproducible and run in CI
+- IaC patterns follow the same 7-element tuple format as code patterns
 
 ---
 
-## v1.4 — Custom Pattern SDK
+## v1.4 — AI-Native Security
 
-- User-defined pattern packs (load from `.guardianshield/patterns/`)
-- Pattern testing workflow (`test_pattern` tool already exists)
-- Community pattern marketplace (share pattern packs via Git)
-- Pattern performance profiling (regex complexity warnings)
+### Strategic Direction
+
+Leverage GuardianShield's unique position as an MCP server to build security
+features that only make sense in an AI-agent context. These features use the
+AI client's reasoning capabilities as a force multiplier.
+
+### Features
+
+**Agent Action Firewall** — Scan shell commands, file writes, and network
+requests before the AI agent executes them. The MCP client sends the proposed
+action; GuardianShield evaluates it and returns allow/block/warn.
+
+**Security Unit Test Generator** — For confirmed true positive findings,
+generate targeted unit tests that verify the vulnerability exists and that
+the fix resolves it. Output as pytest/jest test files.
+
+**AI-Driven Remediation Proposals** — Generate contextual patches for confirmed
+findings. The triage prompt identifies the issue; the remediation prompt
+produces a diff that fixes it, respecting the project's coding patterns.
+
+**Contextual Secure Coding Copilot** — Real-time warnings as code is written.
+The AI client sends incremental code; GuardianShield returns immediate
+feedback on security implications.
+
+**Patch-Risk Simulator** — Given a diff, estimate the security risk delta.
+"This PR increases command injection surface by adding 2 new shell calls
+with user-controlled arguments."
+
+### Design Constraints
+
+- Action firewall must be fast (<50ms per check) to avoid blocking agent flow
+- Generated tests must be self-contained and runnable without project setup
+- Remediation patches must preserve existing code style
+
+---
+
+## v1.5 — Enterprise & Ecosystem
+
+### Strategic Direction
+
+Enable team-wide deployment, policy enforcement, and ecosystem integration
+for organizations adopting GuardianShield across multiple projects and teams.
+
+### Features
+
+**Streamable HTTP Transport** — SSE-based HTTP transport for remote/centralized
+deployment. Team-wide policy enforcement from a shared GuardianShield instance.
+Centralized audit logging across multiple developers. The stdio transport
+remains the default for local development.
+
+**Policy-as-Code Enforcement** — `.guardianshield-policy.yaml` files that define
+organizational security policies. Block merges with unresolved HIGH+ findings,
+require suppression justifications, enforce minimum scan coverage.
+
+**Custom Pattern SDK** — User-defined pattern packs loaded from
+`.guardianshield/patterns/`. Pattern testing workflow (using existing
+`test_pattern` tool). Community pattern marketplace via Git repositories.
+Pattern performance profiling with regex complexity warnings.
+
+**License Compliance Scanning** — SPDX and CycloneDX SBOM generation.
+License compatibility checking. Flag GPL dependencies in MIT/Apache projects.
+
+**Local Security Dashboard** — HTML report generation with finding trends,
+severity distribution, and remediation progress over time. Standalone HTML
+file with embedded charts — no external dependencies.
+
+**Attack-Path Mode** — Combine code vulnerability findings with dependency
+CVE data to map potential exploit chains. "User input → SQL injection in
+app/db.py → database contains credentials for AWS (found in .env)."
+
+### Design Constraints
+
+- HTTP transport must support both SSE (streaming) and batch (request/response)
+- Policy files must be human-readable YAML with schema validation
+- Dashboard must be a single self-contained HTML file
+
+---
+
+## Long-Term Vision
+
+Features under consideration for future releases, not yet scheduled:
+
+- **Semantic code search** — Natural language queries for vulnerability patterns
+  ("find all places where user input reaches a database query")
+- **Cross-language cross-file analysis** — Track data flow across language
+  boundaries (e.g., Python backend → JavaScript frontend)
+- **Runtime security monitoring** — Correlate static findings with runtime
+  behavior for confirmed exploitability
+- **AI model security scanning** — Detect prompt injection vulnerabilities
+  in AI application code (system prompts, tool definitions)
+- **Compliance report generation** — Automated SOC 2, HIPAA, PCI-DSS
+  compliance reports based on scan results and policy adherence
 
 ---
 
 ## Design Principles (All Releases)
 
-1. **Zero dependencies** — stdlib only. Always.
+1. **Zero dependencies** — stdlib only. Always. Every feature must work with
+   `pip install guardianshield` and nothing else.
 2. **MCP-first** — Every feature is accessible via the MCP tool interface.
-3. **Embedded storage** — All state in local SQLite. No external services.
+   The Python API mirrors MCP tools 1:1.
+3. **Embedded storage** — All state in local SQLite. No external services,
+   no cloud accounts, no API keys required.
 4. **Backward compatible** — New features are additive. Existing clients
    and tests never break.
 5. **Independent component** — GuardianShield is a black box. Clients send
    code in, get findings back. Internal strategy is an implementation detail.
-6. **Privacy-first** — No telemetry, no phone-home. False positive filtering
-   happens locally via AI triage prompts.
+6. **Privacy-first** — No telemetry, no phone-home. All analysis happens
+   locally. False positive filtering via AI triage prompts, not data collection.
+7. **Measurable accuracy** — From v1.3 onward, every release includes
+   precision/recall benchmarks against standard test suites.
+
+---
+
+## Cross-AI Review Summary
+
+This roadmap incorporates strategic feedback from independent reviews by
+**Gemini CLI** and **Codex CLI** (March 2026). Key consensus findings:
+
+- **CI integration is the #1 adoption blocker** — SARIF + GitHub Actions
+  templates are critical for team adoption (→ v1.2)
+- **Accuracy must be measurable** — Without benchmarks, users can't compare
+  GuardianShield to alternatives (→ v1.3)
+- **AI-native features are the differentiator** — Action firewall, test
+  generation, and remediation proposals are unique to MCP-first architecture
+  (→ v1.4)
+- **Enterprise features unlock organizational adoption** — Policy enforcement
+  and centralized deployment are table stakes for security tools (→ v1.5)
+- **Novel ideas prioritized**: agent action firewall, security test generator,
+  patch-risk simulator, attack-path mode
