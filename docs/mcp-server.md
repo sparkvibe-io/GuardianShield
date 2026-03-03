@@ -810,7 +810,7 @@ The client sends `initialize` to negotiate capabilities, then confirms with `ini
     },
     "serverInfo": {
       "name": "guardianshield",
-      "version": "1.1.1"
+      "version": "1.2.0"
     }
   }
 }
