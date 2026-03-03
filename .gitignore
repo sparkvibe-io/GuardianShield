@@ -51,6 +51,8 @@ site/
 .mcpregistry_*
 
 # Local docs/notes
+AGENTS.md
+CLAUDE.md
 GEMINI.md
 docs/Critique/
 

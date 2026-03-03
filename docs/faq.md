@@ -92,18 +92,19 @@ Common questions about GuardianShield — what it does, how it works, and how to
 
     GuardianShield requires **Python 3.9 or higher**. It is tested against Python 3.9, 3.10, 3.11, 3.12, and 3.13. Since it has zero external dependencies, it works anywhere a compatible Python interpreter is available.
 
-??? question "What is the difference between the regex and deep engines?"
+??? question "What analysis engines are available?"
 
-    GuardianShield ships with two analysis engines:
+    GuardianShield ships with three analysis engines:
 
-    - **`regex`** (default) — Line-by-line pattern matching with 108+ compiled regex patterns across 7 languages. Fast and suitable for real-time feedback during development.
+    - **`regex`** (default, always enabled) — Line-by-line pattern matching with 108+ compiled regex patterns across 7 languages. Fast and suitable for real-time feedback during development.
     - **`deep`** — Cross-line taint tracking that traces data flow from untrusted sources (e.g. `request.args`, `input()`) to dangerous sinks across multiple lines and function boundaries. Catches vulnerabilities that single-line patterns cannot detect.
+    - **`semantic`** — Structure-aware confidence adjustment that reduces false positives by detecting code context: test files (-0.3), dead code (-0.3), exception handlers (-0.15), uncalled functions (-0.2), and unused imports (-0.25). Adjustments are cumulative with a floor of 0.1.
 
-    By default only `regex` is enabled. You can enable both with `set_engine(engines=["regex", "deep"])` via MCP or `shield.scan_code(code, engines=["regex", "deep"])` via the Python API.
+    By default only `regex` is enabled. Enable additional engines with `set_engine(engines=["regex", "deep", "semantic"])` via MCP or `shield.scan_code(code, engines=["regex", "deep", "semantic"])` via the Python API.
 
-??? question "Does the deep engine require extra dependencies?"
+??? question "Do the deep and semantic engines require extra dependencies?"
 
-    No. The deep engine uses Python's built-in `ast` module for Python analysis and regex for JavaScript/TypeScript analysis. It maintains GuardianShield's zero-dependency guarantee — no additional packages are needed.
+    No. All three engines use only the Python standard library. The deep engine uses `ast` for Python analysis and regex for JavaScript/TypeScript. The semantic engine uses `ast` for Python structural analysis and regex heuristics for JS/TS. GuardianShield's zero-dependency guarantee applies to all engines.
 
 ---
 

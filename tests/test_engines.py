@@ -223,9 +223,9 @@ class TestCoreEngineIntegration:
         db = str(tmp_path / "audit.db")
         shield = GuardianShield(audit_path=db)
         engines = shield.list_engines()
-        assert len(engines) == 2
+        assert len(engines) == 3
         names = {e["name"] for e in engines}
-        assert names == {"regex", "deep"}
+        assert names == {"regex", "deep", "semantic"}
         regex_entry = next(e for e in engines if e["name"] == "regex")
         assert regex_entry["enabled"] is True
         assert "capabilities" in regex_entry
@@ -248,9 +248,9 @@ class TestCoreEngineIntegration:
         shield = GuardianShield(audit_path=db)
         status = shield.status()
         assert "engines" in status
-        assert len(status["engines"]) == 2
+        assert len(status["engines"]) == 3
         engine_names = {e["name"] for e in status["engines"]}
-        assert engine_names == {"regex", "deep"}
+        assert engine_names == {"regex", "deep", "semantic"}
 
     def test_scan_code_engines_override(self, tmp_path):
         db = str(tmp_path / "audit.db")

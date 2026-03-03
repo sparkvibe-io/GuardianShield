@@ -45,7 +45,15 @@ from .manifest import (
 )
 from .mcp_server import GuardianShieldMCPServer
 from .osv import Dependency, OsvCache, check_dependencies
+from .pipeline import EngineTimingResult, merge_engine_findings
 from .profiles import SafetyProfile, ScannerConfig
+from .semantic_engine import SemanticEngine, is_test_file
+from .triage import (
+    available_finding_types,
+    build_triage_prompt,
+    get_all_triage_guides,
+    get_triage_guide,
+)
 
 __all__ = [
     "__version__",
@@ -54,6 +62,7 @@ __all__ = [
     "DeepEngine",
     "Dependency",
     "EngineRegistry",
+    "EngineTimingResult",
     "FalsePositiveDB",
     "Finding",
     "FindingDeduplicator",
@@ -67,8 +76,15 @@ __all__ = [
     "Remediation",
     "SafetyProfile",
     "ScannerConfig",
+    "SemanticEngine",
     "Severity",
+    "available_finding_types",
+    "build_triage_prompt",
     "enrich_finding",
+    "get_all_triage_guides",
+    "get_triage_guide",
+    "is_test_file",
+    "merge_engine_findings",
     "check_dependencies",
     "discover_config",
     "parse_composer_json",

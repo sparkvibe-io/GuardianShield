@@ -408,6 +408,16 @@
       "arguments": [
         { "name": "text", "description": "The text to check for compliance.", "required": true }
       ]
+    },
+    {
+      "name": "triage-finding",
+      "description": "CWE-specific triage prompt for evaluating whether a security finding is a true or false positive. Provides structured guidance with TP/FP indicators, targeted questions, and context to examine.",
+      "arguments": [
+        { "name": "finding_type", "description": "The vulnerability type to triage (e.g. sql_injection, xss, command_injection, path_traversal, insecure_function, insecure_pattern, secret).", "required": true },
+        { "name": "code_snippet", "description": "The code snippet containing the finding.", "required": true },
+        { "name": "file_path", "description": "File path where the finding was detected.", "required": false },
+        { "name": "finding_message", "description": "The finding's message or description.", "required": false }
+      ]
     }
   ]
 }

@@ -91,7 +91,7 @@ scan_code(
 | `code` | `str` | -- | The source code to scan. |
 | `file_path` | `str \| None` | `None` | Optional file path for context in findings. |
 | `language` | `str \| None` | `None` | Programming language hint (e.g. `"python"`, `"javascript"`). |
-| `engines` | `list[str] \| None` | `None` | Analysis engines to use for this scan. `None` uses the session default (set via `set_engines()`). Available engines: `"regex"` (line-by-line patterns) and `"deep"` (cross-line taint tracking). |
+| `engines` | `list[str] \| None` | `None` | Analysis engines to use for this scan. `None` uses the session default (set via `set_engines()`). Available engines: `"regex"` (line-by-line patterns), `"deep"` (cross-line taint tracking), and `"semantic"` (confidence adjustment). |
 
 **Returns:** `list[Finding]` -- all detected vulnerabilities and secrets.
 
@@ -346,7 +346,7 @@ set_engines(names: list[str]) -> list[str]
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `names` | `list[str]` | -- | Engine names to enable (e.g. `["regex"]` or `["regex", "deep"]`). |
+| `names` | `list[str]` | -- | Engine names to enable (e.g. `["regex"]`, `["regex", "deep"]`, or `["regex", "deep", "semantic"]`). |
 
 **Returns:** `list[str]` -- the updated list of enabled engine names.
 
@@ -398,7 +398,7 @@ class AnalysisEngine(Protocol):
     def capabilities(self) -> dict[str, Any]: ...
 ```
 
-Any object implementing these three members can be registered as an analysis engine. GuardianShield ships with two built-in engines: `RegexEngine` and `DeepEngine`.
+Any object implementing these three members can be registered as an analysis engine. GuardianShield ships with three built-in engines: `RegexEngine`, `DeepEngine`, and `SemanticEngine`.
 
 ---
 
@@ -421,6 +421,224 @@ findings = engine.analyze(code, language="python")
 | Supported languages | Python (via `ast`), JavaScript/TypeScript (via regex) |
 | Confidence range | 0.70 -- 0.90 |
 | Dependencies | None (stdlib only) |
+
+---
+
+## SemanticEngine
+
+::: guardianshield.semantic_engine.SemanticEngine
+
+Structure-aware confidence adjustment engine that reduces false positives by analyzing code context. Unlike `RegexEngine` and `DeepEngine`, the `SemanticEngine` is a post-processing engine — it does not produce new findings, but adjusts the confidence of existing ones.
+
+```python
+from guardianshield.semantic_engine import SemanticEngine
+
+engine = SemanticEngine()
+
+# adjust_findings() is the primary method
+adjusted = engine.adjust_findings(findings, code, language="python", file_path="tests/test_app.py")
+```
+
+| Property | Value |
+|---|---|
+| `name` | `"semantic"` |
+| Supported languages | Python (via `ast`), JavaScript/TypeScript (via regex heuristics) |
+| Mode | Post-processing (adjusts confidence, does not produce findings) |
+| Dependencies | None (stdlib only) |
+
+### Confidence Adjustments
+
+| Context | Penalty | Description |
+|---|---|---|
+| Test file | -0.3 | File path matches test patterns (e.g. `test_*.py`, `*.spec.js`) |
+| Dead code | -0.3 | Code in unreachable branches or after `return`/`raise` |
+| Exception handler | -0.15 | Finding inside `except`/`catch` block |
+| Uncalled function | -0.2 | Function defined but never called in the same file |
+| Unused import | -0.25 | Import present but never referenced |
+
+Adjustments are cumulative with a minimum floor of 0.1.
+
+### Methods
+
+#### `analyze`
+
+```python
+analyze(code: str, language: str | None = None, sensitivity: str = "medium") -> list[Finding]
+```
+
+Returns an empty list (protocol compliance). Use `adjust_findings()` instead.
+
+#### `adjust_findings`
+
+```python
+adjust_findings(
+    findings: list[Finding],
+    code: str,
+    language: str | None = None,
+    file_path: str | None = None,
+) -> list[Finding]
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `findings` | `list[Finding]` | -- | Findings to adjust. |
+| `code` | `str` | -- | The source code for context analysis. |
+| `language` | `str \| None` | `None` | Programming language hint. |
+| `file_path` | `str \| None` | `None` | File path for test file detection. |
+
+**Returns:** `list[Finding]` — findings with adjusted confidence scores and `details["semantic_adjustments"]` metadata.
+
+#### `is_test_file`
+
+```python
+is_test_file(file_path: str) -> bool
+```
+
+Check whether a file path matches one of 11 test file patterns.
+
+---
+
+## Result Pipeline
+
+::: guardianshield.pipeline
+
+Utilities for merging findings from multiple analysis engines and timing engine execution.
+
+### `merge_engine_findings`
+
+```python
+from guardianshield.pipeline import merge_engine_findings
+
+merged = merge_engine_findings(all_findings)
+```
+
+Groups findings by coarse fingerprint (file_path + line_number + finding_type). Single-engine groups pass through unchanged. Multi-engine groups keep the highest-confidence finding and boost it by +0.1 per confirming engine (cap 1.0).
+
+```python
+merge_engine_findings(findings: list[Finding]) -> list[Finding]
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `findings` | `list[Finding]` | Findings from multiple engines to merge. |
+
+**Returns:** `list[Finding]` — deduplicated findings with confidence boosts for cross-engine confirmation.
+
+### `timed_analyze`
+
+```python
+from guardianshield.pipeline import timed_analyze
+
+findings, timing = timed_analyze(engine, code, language="python")
+```
+
+Wraps `engine.analyze()` with monotonic timing.
+
+```python
+timed_analyze(
+    engine: AnalysisEngine,
+    code: str,
+    language: str | None = None,
+    sensitivity: str = "medium",
+) -> tuple[list[Finding], EngineTimingResult]
+```
+
+**Returns:** Tuple of (findings, timing result).
+
+### `EngineTimingResult`
+
+```python
+@dataclass
+class EngineTimingResult:
+    engine_name: str
+    duration_ms: float
+    finding_count: int
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `engine_name` | `str` | Name of the engine that was timed. |
+| `duration_ms` | `float` | Execution time in milliseconds. |
+| `finding_count` | `int` | Number of findings produced. |
+
+#### `to_dict`
+
+```python
+to_dict() -> dict[str, Any]
+```
+
+---
+
+## Triage
+
+::: guardianshield.triage
+
+CWE-specific triage prompts for AI-assisted false positive filtering.
+
+### `build_triage_prompt`
+
+```python
+from guardianshield.triage import build_triage_prompt
+
+prompt = build_triage_prompt(
+    finding_type="sql_injection",
+    code_snippet="cursor.execute('SELECT * FROM users WHERE id=' + user_id)",
+    file_path="app/db.py",
+    finding_message="SQL injection via string concatenation",
+)
+```
+
+Build a structured triage prompt for a specific finding type.
+
+```python
+build_triage_prompt(
+    finding_type: str,
+    code_snippet: str,
+    file_path: str = "",
+    finding_message: str = "",
+) -> str
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `finding_type` | `str` | -- | Vulnerability type (e.g. `"sql_injection"`, `"xss"`, `"command_injection"`). |
+| `code_snippet` | `str` | -- | The code containing the finding. |
+| `file_path` | `str` | `""` | File path for context. |
+| `finding_message` | `str` | `""` | The finding's message/description. |
+
+**Returns:** `str` — a structured prompt with TP/FP indicators, questions, and context guidance.
+
+### `get_triage_guide`
+
+```python
+from guardianshield.triage import get_triage_guide
+
+guide = get_triage_guide("sql_injection")
+```
+
+Get the raw triage guide for a vulnerability type.
+
+```python
+get_triage_guide(finding_type: str) -> dict | None
+```
+
+**Returns:** Dict with `true_positive_indicators`, `false_positive_indicators`, `questions`, and `context_to_examine`, or `None` if the type is not supported.
+
+### `available_finding_types`
+
+```python
+from guardianshield.triage import available_finding_types
+
+types = available_finding_types()
+# ['sql_injection', 'xss', 'command_injection', 'path_traversal',
+#  'insecure_function', 'insecure_pattern', 'secret']
+```
+
+```python
+available_finding_types() -> list[str]
+```
+
+**Returns:** `list[str]` — all supported finding types for triage.
 
 ---
 
