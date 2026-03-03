@@ -585,7 +585,7 @@ from guardianshield.sarif import findings_to_sarif
 sarif = findings_to_sarif(
     findings: list[Finding],
     tool_name: str = "GuardianShield",
-    tool_version: str = "1.2.0",
+    tool_version: str = "1.2.1",
     base_path: str | None = None,
 ) -> dict[str, Any]
 ```
@@ -594,7 +594,7 @@ sarif = findings_to_sarif(
 |---|---|---|---|
 | `findings` | `list[Finding]` | -- | The findings to export. |
 | `tool_name` | `str` | `"GuardianShield"` | Tool name in SARIF output. |
-| `tool_version` | `str` | `"1.2.0"` | Tool version in SARIF output. |
+| `tool_version` | `str` | `"1.2.1"` | Tool version in SARIF output. |
 | `base_path` | `str \| None` | `None` | If provided, file paths are made relative to this directory. |
 
 **Returns:** `dict[str, Any]` — SARIF 2.1.0 log with `$schema`, `version`, and `runs`.
@@ -609,7 +609,7 @@ from guardianshield.sarif import findings_to_sarif_json
 sarif_json = findings_to_sarif_json(
     findings: list[Finding],
     tool_name: str = "GuardianShield",
-    tool_version: str = "1.2.0",
+    tool_version: str = "1.2.1",
     base_path: str | None = None,
     indent: int | None = 2,
 ) -> str
@@ -619,7 +619,7 @@ sarif_json = findings_to_sarif_json(
 |---|---|---|---|
 | `findings` | `list[Finding]` | -- | The findings to export. |
 | `tool_name` | `str` | `"GuardianShield"` | Tool name in SARIF output. |
-| `tool_version` | `str` | `"1.2.0"` | Tool version in SARIF output. |
+| `tool_version` | `str` | `"1.2.1"` | Tool version in SARIF output. |
 | `base_path` | `str \| None` | `None` | If provided, file paths are made relative to this directory. |
 | `indent` | `int \| None` | `2` | JSON indentation. Use `None` for compact output. |
 
@@ -636,6 +636,298 @@ sarif = findings_to_sarif_json(findings, base_path="/project")
 # Upload to GitHub Code Scanning:
 # gh code-scanning upload-sarif --sarif=results.sarif
 ```
+
+---
+
+## Inline Suppression
+
+::: guardianshield.suppression
+
+Suppress specific findings by adding inline comments in source code, similar to `# noqa` or `// eslint-disable`.
+
+### Syntax
+
+```python
+code()   # guardianshield:ignore                     # suppress all findings on this line
+code()   # guardianshield:ignore[sql_injection]      # suppress one rule
+code()   # guardianshield:ignore[sql_injection,xss]  # suppress multiple rules
+code()   # guardianshield:ignore[xss] -- known safe  # with reason
+```
+
+All comment styles are supported: Python `#`, JavaScript `//`, and C-style `/* */`.
+
+### `parse_suppression_comment`
+
+Parse a suppression directive from a single line of code.
+
+```python
+from guardianshield.suppression import parse_suppression_comment
+
+directive = parse_suppression_comment("x = foo()  # guardianshield:ignore[xss] -- safe")
+# directive.rules == ["xss"]
+# directive.reason == "safe"
+```
+
+```python
+parse_suppression_comment(line: str) -> SuppressionDirective | None
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `line` | `str` | A single line of code to check for suppression comments. |
+
+**Returns:** `SuppressionDirective` if a directive is found, otherwise `None`.
+
+### `filter_suppressed_findings`
+
+Filter findings against inline suppression comments in the source code. Suppressed findings are **not removed** — they get `metadata["suppressed"] = True` and optionally `metadata["suppression_reason"]` set.
+
+```python
+from guardianshield.suppression import filter_suppressed_findings
+
+findings = filter_suppressed_findings(findings, code)
+```
+
+```python
+filter_suppressed_findings(
+    findings: list[Finding],
+    code: str,
+) -> list[Finding]
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `findings` | `list[Finding]` | List of findings from scanning. |
+| `code` | `str` | The source code that was scanned (needed to read suppression comments). |
+
+**Returns:** The same list of findings, with suppressed ones annotated in metadata.
+
+### `SuppressionDirective`
+
+```python
+@dataclass
+class SuppressionDirective:
+    rules: list[str]       # empty = suppress all
+    reason: str            # from: # guardianshield:ignore[rule] -- reason text
+    line_number: int
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `rules` | `list[str]` | `[]` | Rules to suppress. Empty list means suppress all findings on the line. |
+| `reason` | `str` | `""` | Optional reason from `-- reason text` suffix. |
+| `line_number` | `int` | `0` | 1-based line number where the directive was found. |
+
+---
+
+## Baseline Scanning
+
+::: guardianshield.baseline
+
+Save a snapshot of current findings as a JSON baseline file. On subsequent scans, compare against the baseline and report only new findings. Uses `dedup._fingerprint()` for consistency.
+
+### `save_baseline`
+
+Save finding fingerprints to a JSON baseline file.
+
+```python
+from guardianshield.baseline import save_baseline
+
+result = save_baseline(findings, path=".guardianshield-baseline.json")
+# result == {"fingerprints": 3, "path": ".guardianshield-baseline.json"}
+```
+
+```python
+save_baseline(
+    findings: list[Finding],
+    path: str | None = None,
+) -> dict
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `findings` | `list[Finding]` | -- | Findings to save as baseline. |
+| `path` | `str \| None` | `None` | Output path. Default: `.guardianshield-baseline.json`. |
+
+**Returns:** `dict` with `fingerprints` (count) and `path`.
+
+### `load_baseline`
+
+Load a baseline file and return the set of fingerprint strings.
+
+```python
+from guardianshield.baseline import load_baseline
+
+baseline = load_baseline(path=".guardianshield-baseline.json")
+# baseline == {"abc123...", "def456...", ...}
+```
+
+```python
+load_baseline(path: str | None = None) -> set[str]
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `path` | `str \| None` | `None` | Path to baseline file. Default: `.guardianshield-baseline.json`. |
+
+**Returns:** `set[str]` of fingerprint strings.
+
+**Raises:** `FileNotFoundError` if the file doesn't exist, `ValueError` for invalid format.
+
+### `filter_baseline_findings`
+
+Compare current findings against a baseline and classify them as new, unchanged, or fixed.
+
+```python
+from guardianshield.baseline import filter_baseline_findings
+
+result = filter_baseline_findings(findings, baseline)
+# result.new == [...]       # findings NOT in baseline
+# result.unchanged == [...] # findings still present
+# result.fixed == [...]     # baseline fingerprints no longer present
+```
+
+```python
+filter_baseline_findings(
+    findings: list[Finding],
+    baseline: set[str],
+) -> BaselineResult
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `findings` | `list[Finding]` | Current scan findings. |
+| `baseline` | `set[str]` | Set of fingerprints from a saved baseline. |
+
+**Returns:** `BaselineResult` with classified findings.
+
+### `BaselineResult`
+
+```python
+@dataclass
+class BaselineResult:
+    new: list[Finding]         # findings NOT in baseline
+    unchanged: list[Finding]   # findings still present from baseline
+    fixed: list[str]           # baseline fingerprints no longer present (sorted)
+```
+
+---
+
+## CI Quality Gates
+
+::: guardianshield.ci
+
+Evaluate scan findings against configurable thresholds and return a pass/fail/warn verdict for CI pipelines.
+
+### `check_quality_gate`
+
+```python
+from guardianshield.ci import check_quality_gate, QualityGateConfig
+
+config = QualityGateConfig(fail_on=Severity.HIGH, warn_on=Severity.MEDIUM)
+result = check_quality_gate(findings, config)
+# result.passed == True/False
+# result.exit_code == 0 (pass) or 1 (fail)
+# result.verdict == "pass" / "fail" / "warn"
+```
+
+```python
+check_quality_gate(
+    findings: list[Finding],
+    config: QualityGateConfig | None = None,
+) -> QualityGateResult
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `findings` | `list[Finding]` | -- | Findings to evaluate. |
+| `config` | `QualityGateConfig \| None` | `None` | Quality gate configuration. Uses defaults if `None`. |
+
+**Returns:** `QualityGateResult` with verdict and summary.
+
+### `QualityGateConfig`
+
+```python
+@dataclass
+class QualityGateConfig:
+    fail_on: Severity = Severity.HIGH
+    warn_on: Severity = Severity.MEDIUM
+    max_findings: int | None = None
+    exclude_suppressed: bool = True
+```
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `fail_on` | `Severity` | `HIGH` | Fail if any finding at this severity or above. |
+| `warn_on` | `Severity` | `MEDIUM` | Warn if findings at this severity. |
+| `max_findings` | `int \| None` | `None` | Optional absolute cap on total findings. |
+| `exclude_suppressed` | `bool` | `True` | Skip suppressed findings when evaluating. |
+
+### `QualityGateResult`
+
+```python
+@dataclass
+class QualityGateResult:
+    passed: bool
+    exit_code: int          # 0=pass, 1=fail
+    verdict: str            # "pass", "fail", "warn"
+    summary: dict           # {total, by_severity, failures, warnings}
+    findings: list[Finding] # the findings evaluated
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `passed` | `bool` | Whether the quality gate passed. |
+| `exit_code` | `int` | 0 for pass, 1 for fail. |
+| `verdict` | `str` | `"pass"`, `"fail"`, or `"warn"`. |
+| `summary` | `dict` | Counts by severity, failure/warning lists. |
+| `findings` | `list[Finding]` | The findings that were evaluated. |
+
+---
+
+## Diff Parsing
+
+::: guardianshield.diff
+
+Parse unified diffs and scan only added lines.
+
+### `parse_unified_diff`
+
+Parse a unified diff (e.g., `git diff` output) into structured hunks.
+
+```python
+from guardianshield.diff import parse_unified_diff
+
+hunks = parse_unified_diff(diff_text)
+for hunk in hunks:
+    print(hunk.file_path, len(hunk.added_lines))
+```
+
+```python
+parse_unified_diff(diff_text: str) -> list[DiffHunk]
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `diff_text` | `str` | Unified diff text (e.g., from `git diff`). |
+
+**Returns:** `list[DiffHunk]` with one entry per file in the diff.
+
+### `DiffHunk`
+
+```python
+@dataclass
+class DiffHunk:
+    file_path: str
+    added_lines: dict[int, str]     # line_number -> line_content
+    language: str | None
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `file_path` | `str` | Path of the file in the diff. |
+| `added_lines` | `dict[int, str]` | Map of line number to content for added lines only. |
+| `language` | `str \| None` | Auto-detected language from file extension. |
 
 ---
 

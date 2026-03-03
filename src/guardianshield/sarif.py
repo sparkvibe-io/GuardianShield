@@ -33,7 +33,7 @@ _SARIF_SCHEMA = (
 _SARIF_VERSION = "2.1.0"
 _TOOL_INFO_URI = "https://github.com/sparkvibe-io/GuardianShield"
 _DEFAULT_TOOL_NAME = "GuardianShield"
-_DEFAULT_TOOL_VERSION = "1.2.0"
+_DEFAULT_TOOL_VERSION = "1.2.1"
 
 # ---------------------------------------------------------------------------
 # Severity → SARIF mapping
@@ -231,7 +231,7 @@ def findings_to_sarif(
     Args:
         findings: The findings to export.
         tool_name: Name of the tool (default: ``"GuardianShield"``).
-        tool_version: Version string (default: ``"1.2.0"``).
+        tool_version: Version string (default: ``"1.2.1"``).
         base_path: If provided, file paths are made relative to this directory.
 
     Returns:
@@ -289,7 +289,7 @@ def findings_to_sarif_json(
     Args:
         findings: The findings to export.
         tool_name: Name of the tool (default: ``"GuardianShield"``).
-        tool_version: Version string (default: ``"1.2.0"``).
+        tool_version: Version string (default: ``"1.2.1"``).
         base_path: If provided, file paths are made relative to this directory.
         indent: JSON indentation (default: 2, use ``None`` for compact).
 

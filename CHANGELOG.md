@@ -2,6 +2,19 @@
 
 All notable changes to GuardianShield are documented here.
 
+## [1.2.1] — 2026-03-02
+
+### Added
+- **Inline suppression**: `# guardianshield:ignore[rule]` comments suppress findings with `metadata["suppressed"] = True` (preserves auditability). Supports Python `#`, JS `//`, and C-style `/* */` comments.
+- **Baseline / delta scanning**: `save_baseline` and `scan_with_baseline` MCP tools. Save finding fingerprints to a JSON baseline file and report only new findings on subsequent scans.
+- **CI quality gates**: `check_quality_gate` MCP tool. Evaluate findings against configurable severity thresholds — returns pass/fail/warn verdict with exit codes (0=pass, 1=fail).
+- **Bulk APIs**: `scan_files` (multiple files in one call) and `scan_diff` (parse unified diff, scan only added lines) MCP tools for batch scanning workflows.
+- New modules: `suppression.py`, `baseline.py`, `ci.py`, `diff.py`
+
+### Changed
+- MCP tools: 22 → 27 | Tests: 1707 → 1883
+- `scan_code()` pipeline now applies inline suppression after engine merge and before FP annotation
+
 ## [1.2.0] — 2026-03-02
 
 ### Added

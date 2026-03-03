@@ -38,7 +38,7 @@ code scanning, PII detection, prompt injection defense, secret detection, and au
 
 <div class="stats-row">
   <div class="stat-card">
-    <span class="stat-number">21</span>
+    <span class="stat-number">27</span>
     <span class="stat-label">MCP Tools</span>
   </div>
   <div class="stat-card">
@@ -128,7 +128,7 @@ GuardianShield sits between your AI agent and your codebase, scanning every inte
 <!-- 22 MCP Tools -->
 <div class="gs-section" markdown>
 
-## :material-wrench: 22 MCP Tools
+## :material-wrench: 27 MCP Tools
 
 Every security capability is exposed as a standard MCP tool — callable from any compatible AI client.
 
@@ -216,6 +216,30 @@ Every security capability is exposed as a standard MCP tool — callable from an
   <div class="tool-card">
     <h3>set_engine</h3>
     <p>Set which analysis engines are active for code scanning in the current session.</p>
+  </div>
+  <div class="tool-card">
+    <h3>export_sarif</h3>
+    <p>Export findings as SARIF 2.1.0 JSON for GitHub Code Scanning and CI pipelines.</p>
+  </div>
+  <div class="tool-card">
+    <h3>save_baseline</h3>
+    <p>Save current findings as a baseline for delta scanning on subsequent runs.</p>
+  </div>
+  <div class="tool-card">
+    <h3>scan_with_baseline</h3>
+    <p>Scan code and report only new findings not present in a saved baseline.</p>
+  </div>
+  <div class="tool-card">
+    <h3>check_quality_gate</h3>
+    <p>Evaluate findings against severity thresholds — pass/fail/warn for CI gates.</p>
+  </div>
+  <div class="tool-card">
+    <h3>scan_files</h3>
+    <p>Scan multiple files in one call for batch scanning workflows.</p>
+  </div>
+  <div class="tool-card">
+    <h3>scan_diff</h3>
+    <p>Parse unified diff and scan only added lines with correct line mapping.</p>
   </div>
 </div>
 
@@ -407,7 +431,7 @@ Pre-configured security policies for different industries and use cases. Switch 
 | **GuardianShield** | **1 of 17** | **2 of 17** | **2 of 17** | **1 of 17** | **17 of 17** |
 
 !!! info "Feature comparison"
-    The comparison above covers 17 functional categories. GuardianShield exposes **21 MCP tools** total — some categories (like dependency scanning) map to multiple tools.
+    The comparison above covers 17 functional categories. GuardianShield exposes **27 MCP tools** total — some categories (like dependency scanning and CI integration) map to multiple tools.
 
 </div>
 

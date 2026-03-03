@@ -19,12 +19,15 @@ Quick start::
 
 from __future__ import annotations
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
+from .baseline import BaselineResult, filter_baseline_findings, load_baseline, save_baseline
+from .ci import QualityGateConfig, QualityGateResult, check_quality_gate
 from .config import ProjectConfig, discover_config
 from .core import GuardianShield
 from .dedup import DedupResult, FindingDeduplicator
 from .deep_engine import DeepEngine
+from .diff import DiffHunk, parse_unified_diff
 from .engines import AnalysisEngine, EngineRegistry, RegexEngine
 from .enrichment import enrich_finding
 from .feedback import FalsePositiveDB
@@ -49,6 +52,7 @@ from .pipeline import EngineTimingResult, merge_engine_findings
 from .profiles import SafetyProfile, ScannerConfig
 from .sarif import findings_to_sarif, findings_to_sarif_json
 from .semantic_engine import SemanticEngine, is_test_file
+from .suppression import SuppressionDirective, filter_suppressed_findings, parse_suppression_comment
 from .triage import (
     available_finding_types,
     build_triage_prompt,
@@ -59,9 +63,11 @@ from .triage import (
 __all__ = [
     "__version__",
     "AnalysisEngine",
+    "BaselineResult",
     "DedupResult",
     "DeepEngine",
     "Dependency",
+    "DiffHunk",
     "EngineRegistry",
     "EngineTimingResult",
     "FalsePositiveDB",
@@ -72,6 +78,8 @@ __all__ = [
     "GuardianShieldMCPServer",
     "OsvCache",
     "ProjectConfig",
+    "QualityGateConfig",
+    "QualityGateResult",
     "Range",
     "RegexEngine",
     "Remediation",
@@ -79,17 +87,22 @@ __all__ = [
     "ScannerConfig",
     "SemanticEngine",
     "Severity",
+    "SuppressionDirective",
     "available_finding_types",
     "build_triage_prompt",
+    "check_dependencies",
+    "check_quality_gate",
+    "discover_config",
     "enrich_finding",
+    "filter_baseline_findings",
+    "filter_suppressed_findings",
     "findings_to_sarif",
     "findings_to_sarif_json",
     "get_all_triage_guides",
     "get_triage_guide",
     "is_test_file",
+    "load_baseline",
     "merge_engine_findings",
-    "check_dependencies",
-    "discover_config",
     "parse_composer_json",
     "parse_composer_lock",
     "parse_go_mod",
@@ -101,5 +114,8 @@ __all__ = [
     "parse_pnpm_lock_yaml",
     "parse_pyproject_toml",
     "parse_requirements_txt",
+    "parse_suppression_comment",
+    "parse_unified_diff",
     "parse_yarn_lock",
+    "save_baseline",
 ]
