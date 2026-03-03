@@ -585,7 +585,7 @@ from guardianshield.sarif import findings_to_sarif
 sarif = findings_to_sarif(
     findings: list[Finding],
     tool_name: str = "GuardianShield",
-    tool_version: str = "1.1.1",
+    tool_version: str = "1.2.0",
     base_path: str | None = None,
 ) -> dict[str, Any]
 ```
@@ -594,7 +594,7 @@ sarif = findings_to_sarif(
 |---|---|---|---|
 | `findings` | `list[Finding]` | -- | The findings to export. |
 | `tool_name` | `str` | `"GuardianShield"` | Tool name in SARIF output. |
-| `tool_version` | `str` | `"1.1.1"` | Tool version in SARIF output. |
+| `tool_version` | `str` | `"1.2.0"` | Tool version in SARIF output. |
 | `base_path` | `str \| None` | `None` | If provided, file paths are made relative to this directory. |
 
 **Returns:** `dict[str, Any]` — SARIF 2.1.0 log with `$schema`, `version`, and `runs`.
@@ -609,7 +609,7 @@ from guardianshield.sarif import findings_to_sarif_json
 sarif_json = findings_to_sarif_json(
     findings: list[Finding],
     tool_name: str = "GuardianShield",
-    tool_version: str = "1.1.1",
+    tool_version: str = "1.2.0",
     base_path: str | None = None,
     indent: int | None = 2,
 ) -> str
@@ -619,7 +619,7 @@ sarif_json = findings_to_sarif_json(
 |---|---|---|---|
 | `findings` | `list[Finding]` | -- | The findings to export. |
 | `tool_name` | `str` | `"GuardianShield"` | Tool name in SARIF output. |
-| `tool_version` | `str` | `"1.1.1"` | Tool version in SARIF output. |
+| `tool_version` | `str` | `"1.2.0"` | Tool version in SARIF output. |
 | `base_path` | `str \| None` | `None` | If provided, file paths are made relative to this directory. |
 | `indent` | `int \| None` | `2` | JSON indentation. Use `None` for compact output. |
 

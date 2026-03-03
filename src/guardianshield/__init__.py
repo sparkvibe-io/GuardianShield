@@ -19,7 +19,7 @@ Quick start::
 
 from __future__ import annotations
 
-__version__ = "1.1.1"
+__version__ = "1.2.0"
 
 from .config import ProjectConfig, discover_config
 from .core import GuardianShield
