@@ -8,7 +8,7 @@
 
 ---
 
-## Current State (v1.1.0)
+## Current State (v1.1.1)
 
 - **21 MCP tools** | **3 prompts** | **1627 tests** | **Zero dependencies**
 - 3 analysis engines: RegexEngine, DeepEngine, SemanticEngine
