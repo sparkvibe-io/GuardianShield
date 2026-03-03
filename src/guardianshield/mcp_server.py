@@ -40,6 +40,7 @@ from .core import GuardianShield
 from .manifest import parse_manifest
 from .osv import Dependency
 from .profiles import list_profiles
+from .sarif import findings_to_sarif_json
 from .triage import available_finding_types, build_triage_prompt
 
 # ---------------------------------------------------------------------------
@@ -538,6 +539,36 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["engines"],
         },
     },
+    {
+        "name": "export_sarif",
+        "description": (
+            "Export scan findings as SARIF 2.1.0 JSON for GitHub Code Scanning, "
+            "VS Code, and CI integration"
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": "Source code to scan.",
+                },
+                "language": {
+                    "type": "string",
+                    "description": "Programming language.",
+                },
+                "file_path": {
+                    "type": "string",
+                    "description": "File path for SARIF locations.",
+                },
+                "engines": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Analysis engines to use.",
+                },
+            },
+            "required": ["code", "language"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -696,6 +727,7 @@ class GuardianShieldMCPServer:
             "unmark_false_positive": self._tool_unmark_false_positive,
             "list_engines": self._tool_list_engines,
             "set_engine": self._tool_set_engine,
+            "export_sarif": self._tool_export_sarif,
         }
 
         logger.info("GuardianShieldMCPServer created (shield=%r)", self._shield)
@@ -1402,6 +1434,24 @@ class GuardianShieldMCPServer:
             "engines": enabled,
         }
         return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_export_sarif(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        code = args.get("code")
+        if not code or not isinstance(code, str):
+            return self._tool_error("'code' is required.")
+        language = args.get("language")
+        if not language or not isinstance(language, str):
+            return self._tool_error("'language' is required.")
+
+        file_path = args.get("file_path")
+        engines = args.get("engines")
+
+        findings = self._shield.scan_code(
+            code, file_path=file_path, language=language, engines=engines,
+        )
+        sarif_json = findings_to_sarif_json(findings)
+        return self._tool_success(sarif_json)
 
     # ------------------------------------------------------------------
     # Redaction

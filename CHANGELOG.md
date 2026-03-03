@@ -2,6 +2,17 @@
 
 All notable changes to GuardianShield are documented here.
 
+## [1.2.0] — 2026-03-02
+
+### Added
+- **SARIF 2.1.0 export**: New `export_sarif` MCP tool and `findings_to_sarif()` / `findings_to_sarif_json()` Python API
+- SARIF output compatible with GitHub Code Scanning, VS Code SARIF Viewer, and CI pipelines
+- Includes `partialFingerprints` for GitHub upload compatibility
+- CWE taxonomy and security-severity scoring in SARIF output
+
+### Changed
+- MCP tools: 21 → 22 | Tests: 1627 → 1707
+
 ## [1.1.1] — 2026-03-03
 
 ### Changed

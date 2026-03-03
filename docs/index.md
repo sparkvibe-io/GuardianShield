@@ -125,10 +125,10 @@ GuardianShield sits between your AI agent and your codebase, scanning every inte
 
 </div>
 
-<!-- 21 MCP Tools -->
+<!-- 22 MCP Tools -->
 <div class="gs-section" markdown>
 
-## :material-wrench: 21 MCP Tools
+## :material-wrench: 22 MCP Tools
 
 Every security capability is exposed as a standard MCP tool — callable from any compatible AI client.
 

@@ -96,7 +96,7 @@ class TestToolsList:
         ]
         responses = _capture_output(server, msgs)
         tools = responses[0]["result"]["tools"]
-        assert len(tools) == 21
+        assert len(tools) == 22
         names = {t["name"] for t in tools}
         assert names == {
             "scan_code", "scan_input", "scan_output", "check_secrets",
@@ -107,6 +107,7 @@ class TestToolsList:
             "mark_false_positive", "list_false_positives",
             "unmark_false_positive",
             "list_engines", "set_engine",
+            "export_sarif",
         }
 
 

@@ -400,7 +400,7 @@ class TestMCPIntegration(unittest.TestCase):
     def test_tool_count(self) -> None:
         from guardianshield.mcp_server import TOOLS
 
-        self.assertEqual(len(TOOLS), 21)
+        self.assertEqual(len(TOOLS), 22)
 
     def test_mark_fp_via_mcp(self) -> None:
         import json

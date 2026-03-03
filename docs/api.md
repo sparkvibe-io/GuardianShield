@@ -569,6 +569,76 @@ to_dict() -> dict[str, Any]
 
 ---
 
+## SARIF Export
+
+::: guardianshield.sarif
+
+Convert findings to [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) format for integration with GitHub Code Scanning, VS Code SARIF Viewer, and CI pipelines.
+
+### `findings_to_sarif`
+
+Convert a list of findings to a SARIF 2.1.0 log dict.
+
+```python
+from guardianshield.sarif import findings_to_sarif
+
+sarif = findings_to_sarif(
+    findings: list[Finding],
+    tool_name: str = "GuardianShield",
+    tool_version: str = "1.1.1",
+    base_path: str | None = None,
+) -> dict[str, Any]
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `findings` | `list[Finding]` | -- | The findings to export. |
+| `tool_name` | `str` | `"GuardianShield"` | Tool name in SARIF output. |
+| `tool_version` | `str` | `"1.1.1"` | Tool version in SARIF output. |
+| `base_path` | `str \| None` | `None` | If provided, file paths are made relative to this directory. |
+
+**Returns:** `dict[str, Any]` — SARIF 2.1.0 log with `$schema`, `version`, and `runs`.
+
+### `findings_to_sarif_json`
+
+Convert a list of findings to a SARIF 2.1.0 JSON string.
+
+```python
+from guardianshield.sarif import findings_to_sarif_json
+
+sarif_json = findings_to_sarif_json(
+    findings: list[Finding],
+    tool_name: str = "GuardianShield",
+    tool_version: str = "1.1.1",
+    base_path: str | None = None,
+    indent: int | None = 2,
+) -> str
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `findings` | `list[Finding]` | -- | The findings to export. |
+| `tool_name` | `str` | `"GuardianShield"` | Tool name in SARIF output. |
+| `tool_version` | `str` | `"1.1.1"` | Tool version in SARIF output. |
+| `base_path` | `str \| None` | `None` | If provided, file paths are made relative to this directory. |
+| `indent` | `int \| None` | `2` | JSON indentation. Use `None` for compact output. |
+
+**Returns:** `str` — SARIF 2.1.0 JSON string.
+
+```python
+from guardianshield import GuardianShield
+from guardianshield.sarif import findings_to_sarif_json
+
+shield = GuardianShield()
+findings = shield.scan_code('password = "hunter2"', file_path="app.py")
+sarif = findings_to_sarif_json(findings, base_path="/project")
+
+# Upload to GitHub Code Scanning:
+# gh code-scanning upload-sarif --sarif=results.sarif
+```
+
+---
+
 ## Triage
 
 ::: guardianshield.triage
