@@ -5,11 +5,11 @@
 [![PyPI version](https://img.shields.io/pypi/v/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![Python](https://img.shields.io/pypi/pyversions/guardianshield?v=1)](https://pypi.org/project/guardianshield/)
 [![License](https://img.shields.io/github/license/sparkvibe-io/GuardianShield)](https://github.com/sparkvibe-io/GuardianShield/blob/main/LICENSE)
-[![Tests](https://img.shields.io/badge/tests-1707%20passing-brightgreen)]()
+[![Tests](https://img.shields.io/badge/tests-1883%20passing-brightgreen)]()
 
 Universal AI security layer — an open-source MCP server for code scanning, PII detection, prompt injection defense, secret detection, dependency auditing, and audit logging.
 
-**Zero dependencies** · **22 MCP tools** · **5 safety profiles** · **108+ detection patterns**
+**Zero dependencies** · **27 MCP tools** · **5 safety profiles** · **108+ detection patterns**
 
 ## Features
 
@@ -67,6 +67,8 @@ claude mcp add guardianshield -- guardianshield-mcp
 | `scan_input` | Check user/agent input for prompt injection attempts |
 | `scan_output` | Check AI output for PII leaks and content violations |
 | `check_secrets` | Detect hardcoded secrets and credentials |
+| `scan_files` | Scan multiple files in one call |
+| `scan_diff` | Parse unified diff and scan only added lines |
 
 ### Dependency Security
 
@@ -93,6 +95,17 @@ claude mcp add guardianshield -- guardianshield-mcp
 | `set_engine` | Set active analysis engines for code scanning |
 
 Three engines ship built-in: `regex` (line-by-line pattern matching, enabled by default), `deep` (cross-line taint tracking), and `semantic` (structure-aware confidence adjustment).
+
+### CI & Developer Workflow
+
+| Tool | Description |
+|------|-------------|
+| `export_sarif` | Export findings as SARIF 2.1.0 JSON for GitHub Code Scanning and CI |
+| `save_baseline` | Save current findings as a baseline for delta scanning |
+| `scan_with_baseline` | Scan code and report only new findings vs. baseline |
+| `check_quality_gate` | Evaluate findings against severity thresholds (pass/fail/warn) |
+| `scan_files` | Scan multiple files in one call |
+| `scan_diff` | Parse unified diff and scan only added lines |
 
 ### Configuration & Utilities
 

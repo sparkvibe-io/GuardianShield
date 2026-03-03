@@ -15,7 +15,7 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
 [Any MCP Client: Claude Code / VS Code / Cursor / etc.]
     |  JSON-RPC over stdin/stdout
     |
-[GuardianShieldMCPServer]         <- mcp_server.py (22 tools, 3 prompts)
+[GuardianShieldMCPServer]         <- mcp_server.py (27 tools, 3 prompts)
     |
 [GuardianShield core]             <- core.py (orchestrator)
     |
@@ -35,6 +35,10 @@ GuardianShield follows a modular, layered architecture designed for clarity, tes
     |-- [ProjectConfig]  <- config.py (.guardianshield.json/yaml)
     |-- [Deduplicator]   <- dedup.py (SHA-256 fingerprints)
     |-- [FalsePositiveDB] <- feedback.py (per-project SQLite)
+    |-- [Suppression]   <- suppression.py (inline ignore comments)
+    |-- [Baseline]      <- baseline.py (delta scanning)
+    |-- [QualityGate]   <- ci.py (CI pass/fail/warn)
+    |-- [DiffParser]    <- diff.py (unified diff scanning)
     '-- [SafetyProfile]  <- profiles.py + YAML
 ```
 
@@ -50,7 +54,7 @@ The architecture has three distinct layers:
 
 ### `mcp_server.py` — MCP Server
 
-Hand-rolled JSON-RPC 2.0 server that implements the full MCP protocol without any SDK dependency. Reads from `stdin`, writes to `stdout`, and handles `initialize`, `tools/list`, `tools/call`, and all required MCP lifecycle methods. Exposes 21 security tools to any MCP-compatible client.
+Hand-rolled JSON-RPC 2.0 server that implements the full MCP protocol without any SDK dependency. Reads from `stdin`, writes to `stdout`, and handles `initialize`, `tools/list`, `tools/call`, and all required MCP lifecycle methods. Exposes 27 security tools to any MCP-compatible client.
 
 ### `core.py` — Orchestrator
 
@@ -132,6 +136,22 @@ Computes stable SHA-256 fingerprints for findings based on file path, line numbe
 
 Local-first dependency vulnerability scanner using the OSV.dev API. Syncs vulnerability data to a local SQLite cache (`~/.guardianshield/osv_cache.db`), enabling offline lookups. Supports PyPI, npm, Go, and Packagist ecosystems. Maps CVSS scores to GuardianShield severity levels and returns findings with `DEPENDENCY_VULNERABILITY` type.
 
+### `suppression.py` — Inline Suppression
+
+Parses `# guardianshield:ignore[rule]` inline comments and annotates matching findings with `metadata["suppressed"] = True`. Supports Python `#`, JavaScript `//`, and C-style `/* */` comment styles. Optionally captures a reason via `-- reason text` suffix. Applied in `core.scan_code()` after engine merge and before false positive annotation.
+
+### `baseline.py` — Baseline / Delta Scanning
+
+Saves scan finding fingerprints to a JSON baseline file (`.guardianshield-baseline.json`). On subsequent scans, `filter_baseline_findings()` compares current findings against the baseline and returns a `BaselineResult` with new, unchanged, and fixed findings. Reuses `dedup._fingerprint()` for consistency.
+
+### `ci.py` — CI Quality Gates
+
+Evaluates scan findings against configurable severity thresholds. `check_quality_gate()` returns a `QualityGateResult` with pass/fail/warn verdict, exit code (0=pass, 1=fail), and summary counts by severity. Supports `fail_on`, `warn_on`, `max_findings`, and `exclude_suppressed` options.
+
+### `diff.py` — Diff Parsing & Bulk Scanning
+
+Parses unified diff format (`git diff` output) into `DiffHunk` objects with added lines and correct line number mapping. `scan_diff()` scans only added lines and returns findings with accurate line numbers and file paths. Language is auto-detected from file extensions via `EXTENSION_MAP`.
+
 ### `manifest.py` — Manifest File Parser
 
 Parses 11 dependency manifest formats into `Dependency` objects for vulnerability checking. Supports requirements.txt (and variants), package.json, pyproject.toml, package-lock.json, yarn.lock, pnpm-lock.yaml, Pipfile.lock, go.mod, go.sum, composer.json, and composer.lock. All parsers are stdlib-only with zero external dependencies. The `parse_manifest()` function auto-detects the format from the filename and dispatches to the appropriate parser.
@@ -190,6 +210,7 @@ The following walkthrough traces what happens when a client calls the `scan_code
    |                                |-- secrets.check_secrets(text)
    |                                |
    |                             6. Combines Finding[] results
+   |                                |-- Applies inline suppression
    |                                |-- Logs to audit.db (SHA-256 only)
    |                                |
    |   <--- JSON-RPC response ------|
@@ -221,7 +242,7 @@ GuardianShield/
 |-- src/
 |   '-- guardianshield/
 |       |-- __init__.py          # Package init, public API exports
-|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (22 tools)
+|       |-- mcp_server.py        # JSON-RPC 2.0 MCP server (27 tools)
 |       |-- core.py              # Orchestrator — routes scans through scanners
 |       |-- scanner.py           # Code vulnerability scanner (uses patterns/)
 |       |-- engines.py           # AnalysisEngine protocol, RegexEngine, EngineRegistry
@@ -252,6 +273,11 @@ GuardianShield/
 |       |-- feedback.py          # False positive feedback loop (per-project SQLite)
 |       |-- osv.py               # OSV.dev dependency scanner (SQLite cache)
 |       |-- manifest.py          # Manifest file parser (11 formats)
+|       |-- sarif.py             # SARIF 2.1.0 export
+|       |-- suppression.py       # Inline suppression (# guardianshield:ignore)
+|       |-- baseline.py          # Baseline/delta scanning
+|       |-- ci.py                # CI quality gates (pass/fail/warn)
+|       |-- diff.py              # Unified diff parsing and bulk scanning
 |       '-- profiles/
 |           |-- general.yaml     # Balanced defaults for everyday development
 |           |-- education.yaml   # Content safety for learning environments
@@ -276,7 +302,13 @@ GuardianShield/
 |   |-- test_scanner.py
 |   |-- test_secrets.py
 |   |-- test_engines.py          # Engine framework tests
-|   '-- test_deep_engine.py      # DeepEngine taint tracking tests
+|   |-- test_deep_engine.py      # DeepEngine taint tracking tests
+|   |-- test_sarif.py            # SARIF export tests
+|   |-- test_suppression.py      # Inline suppression tests
+|   |-- test_baseline.py         # Baseline scanning tests
+|   |-- test_ci.py               # CI quality gate tests
+|   |-- test_diff.py             # Diff parsing and bulk scanning tests
+|   '-- test_feedback.py         # False positive feedback tests
 |-- docs/                        # MkDocs Material documentation
 |-- .github/workflows/           # CI/CD pipelines
 |-- mkdocs.yml                   # MkDocs configuration

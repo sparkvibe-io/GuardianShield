@@ -32,6 +32,7 @@ from .pipeline import EngineTimingResult, merge_engine_findings, timed_analyze
 from .profiles import SafetyProfile, list_profiles, load_profile
 from .secrets import check_secrets
 from .semantic_engine import SemanticEngine
+from .suppression import filter_suppressed_findings
 
 logger = logging.getLogger(__name__)
 
@@ -261,6 +262,7 @@ class GuardianShield:
             )
 
         self._engine_timings = timings
+        findings = filter_suppressed_findings(findings, code)
         self._annotate_fps(findings)
         self._log("code", code, findings, {"file_path": file_path})
         return findings

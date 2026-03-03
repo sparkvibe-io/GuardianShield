@@ -8,9 +8,9 @@
 
 ---
 
-## Current State (v1.1.1)
+## Current State (v1.2.1)
 
-- **21 MCP tools** | **3 prompts** | **1627 tests** | **Zero dependencies**
+- **27 MCP tools** | **3 prompts** | **1883 tests** | **Zero dependencies**
 - 3 analysis engines: RegexEngine, DeepEngine, SemanticEngine
 - 108+ detection patterns across 7 languages (Python, JS/TS, Go, Java, Ruby, PHP, C#)
 - CWE-specific triage prompts for AI-assisted false positive filtering
@@ -67,7 +67,7 @@ core.py (Orchestrator)
 
 ---
 
-## v1.2 — Developer Experience & CI Integration
+## v1.2 — Developer Experience & CI Integration [RELEASED]
 
 ### Strategic Direction
 
@@ -75,36 +75,28 @@ Make GuardianShield the easiest SAST tool to adopt in CI/CD and daily developmen
 Focus on output interoperability, developer workflow integration, and reducing
 friction for teams adopting security scanning.
 
-### Features
+### Features — All Done
 
 **SARIF Export** — Standard SARIF 2.1.0 output for GitHub Code Scanning, VS Code
-SARIF Viewer, and other security ecosystem tools. Enables first-class integration
-with GitHub's code scanning alerts UI.
+SARIF Viewer, and other security ecosystem tools. `export_sarif` MCP tool +
+`findings_to_sarif()` / `findings_to_sarif_json()` Python API. (v1.2.0)
 
 **Inline Suppression** — `# guardianshield:ignore[rule]` comments for intentional
-dismissals. Developers mark known-safe patterns directly in source code with
-required metadata: reason, owner, and optional `expires_at` for time-boxed
-suppressions.
+dismissals. Supports Python `#`, JS `//`, and C-style `/* */` comments. Suppressed
+findings get `metadata["suppressed"] = True` (preserves auditability). Optional
+reason via `-- reason text` suffix. (v1.2.1)
 
-**CI Quality Gates** — GitHub Actions templates with configurable thresholds
-(e.g., fail on any HIGH+, warn on MEDIUM). Pre-built workflow YAML that teams
-can drop into `.github/workflows/`.
+**CI Quality Gates** — `check_quality_gate` MCP tool with configurable thresholds
+(fail on HIGH+, warn on MEDIUM). Returns pass/fail/warn verdict with exit codes
+(0=pass, 1=fail). Suppressed findings optionally excluded. (v1.2.1)
 
-**Baseline / Delta Scanning** — Scan only changed code (diff-based). Compare
-against a baseline scan to report only new findings, reducing noise in PRs.
+**Baseline / Delta Scanning** — `save_baseline` and `scan_with_baseline` MCP tools.
+Save finding fingerprints as a JSON baseline; subsequent scans report only new
+findings. Uses SHA-256 fingerprinting from `dedup.py`. (v1.2.1)
 
-**Structured JSON MCP Output** — Return findings as structured JSON objects
-instead of string-wrapped JSON in MCP text content blocks. Eliminates
-double-parsing on the client side.
-
-**Bulk MCP APIs** — `scan_files` (multiple files), `scan_diff` (unified diff),
-`scan_pr` (GitHub PR number) for batch scanning workflows.
-
-### Design Constraints
-
-- SARIF output must be valid per the OASIS SARIF 2.1.0 spec
-- Inline suppression must be language-comment-aware (Python `#`, JS `//`, etc.)
-- CI templates must work without any GuardianShield-specific CI tooling
+**Bulk MCP APIs** — `scan_files` (multiple files in one call) and `scan_diff`
+(parse unified diff, scan only added lines with correct line mapping) for batch
+scanning workflows. (v1.2.1)
 
 ---
 

@@ -96,7 +96,7 @@ class TestToolsList:
         ]
         responses = _capture_output(server, msgs)
         tools = responses[0]["result"]["tools"]
-        assert len(tools) == 22
+        assert len(tools) == 27
         names = {t["name"] for t in tools}
         assert names == {
             "scan_code", "scan_input", "scan_output", "check_secrets",
@@ -108,6 +108,9 @@ class TestToolsList:
             "unmark_false_positive",
             "list_engines", "set_engine",
             "export_sarif",
+            "save_baseline", "scan_with_baseline",
+            "check_quality_gate",
+            "scan_files", "scan_diff",
         }
 
 
@@ -334,7 +337,7 @@ class TestShieldStatus:
         ]
         responses = _capture_output(server, msgs)
         content = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert content["version"] == "1.2.0"
+        assert content["version"] == "1.2.1"
         assert content["profile"] == "general"
         assert "scanners" in content
         assert "capabilities" in content
@@ -756,7 +759,7 @@ class TestShieldStatusV2:
         ]
         responses = _capture_output(server, msgs)
         content = json.loads(responses[0]["result"]["content"][0]["text"])
-        assert content["version"] == "1.2.0"
+        assert content["version"] == "1.2.1"
 
 
 # ---------------------------------------------------------------------------
@@ -993,7 +996,7 @@ class TestSyncVulnerabilities:
 class TestExports:
     def test_version_is_1_0(self):
         import guardianshield
-        assert guardianshield.__version__ == "1.2.0"
+        assert guardianshield.__version__ == "1.2.1"
 
     def test_v2_types_exported(self):
         from guardianshield import (

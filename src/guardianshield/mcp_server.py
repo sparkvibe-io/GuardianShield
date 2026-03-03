@@ -36,7 +36,12 @@ import signal
 import sys
 from typing import Any
 
+from .baseline import filter_baseline_findings, load_baseline, save_baseline
+from .ci import QualityGateConfig, check_quality_gate
 from .core import GuardianShield
+from .diff import parse_unified_diff
+from .diff import scan_diff as _scan_diff
+from .findings import Severity
 from .manifest import parse_manifest
 from .osv import Dependency
 from .profiles import list_profiles
@@ -63,7 +68,7 @@ MCP_PROTOCOL_VERSION = "2024-11-05"
 
 SERVER_INFO = {
     "name": "guardianshield",
-    "version": "1.2.0",
+    "version": "1.2.1",
 }
 
 # ---------------------------------------------------------------------------
@@ -569,6 +574,168 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["code", "language"],
         },
     },
+    {
+        "name": "save_baseline",
+        "description": (
+            "Scan code and save the findings as a baseline JSON file. "
+            "On subsequent scans with scan_with_baseline, only NEW findings "
+            "(not in the baseline) are reported."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": "Source code to scan.",
+                },
+                "language": {
+                    "type": "string",
+                    "description": "Optional programming language hint.",
+                },
+                "file_path": {
+                    "type": "string",
+                    "description": "Optional file path for context.",
+                },
+                "output_path": {
+                    "type": "string",
+                    "description": (
+                        "Path to save the baseline file. "
+                        "Default: .guardianshield-baseline.json"
+                    ),
+                },
+            },
+            "required": ["code"],
+        },
+    },
+    {
+        "name": "scan_with_baseline",
+        "description": (
+            "Scan code and compare against a saved baseline, returning only "
+            "NEW findings that are not in the baseline. Use save_baseline "
+            "first to create a baseline."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": "Source code to scan.",
+                },
+                "language": {
+                    "type": "string",
+                    "description": "Optional programming language hint.",
+                },
+                "file_path": {
+                    "type": "string",
+                    "description": "Optional file path for context.",
+                },
+                "baseline_path": {
+                    "type": "string",
+                    "description": (
+                        "Path to the baseline file. "
+                        "Default: .guardianshield-baseline.json"
+                    ),
+                },
+            },
+            "required": ["code"],
+        },
+    },
+    {
+        "name": "check_quality_gate",
+        "description": (
+            "Scan code and evaluate findings against configurable severity "
+            "thresholds. Returns a pass/fail/warn verdict suitable for CI "
+            "pipelines. Exit codes: 0=pass, 1=fail."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "description": "Source code to scan.",
+                },
+                "language": {
+                    "type": "string",
+                    "description": "Optional programming language hint.",
+                },
+                "file_path": {
+                    "type": "string",
+                    "description": "Optional file path for context.",
+                },
+                "fail_on": {
+                    "type": "string",
+                    "description": (
+                        "Fail if any finding at this severity or above. "
+                        "Default: high"
+                    ),
+                    "enum": ["critical", "high", "medium", "low", "info"],
+                },
+                "warn_on": {
+                    "type": "string",
+                    "description": (
+                        "Warn if findings at this severity. "
+                        "Default: medium"
+                    ),
+                    "enum": ["critical", "high", "medium", "low", "info"],
+                },
+                "max_findings": {
+                    "type": "integer",
+                    "description": "Optional absolute cap on finding count.",
+                    "minimum": 0,
+                },
+            },
+            "required": ["code"],
+        },
+    },
+    {
+        "name": "scan_files",
+        "description": (
+            "Scan multiple files in one call. Returns findings grouped "
+            "by file with a summary of total findings."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "path": {
+                                "type": "string",
+                                "description": "Path to the file.",
+                            },
+                            "language": {
+                                "type": "string",
+                                "description": "Optional language hint.",
+                            },
+                        },
+                        "required": ["path"],
+                    },
+                    "description": "List of files to scan.",
+                },
+            },
+            "required": ["files"],
+        },
+    },
+    {
+        "name": "scan_diff",
+        "description": (
+            "Scan a unified diff (e.g. from git diff) for vulnerabilities. "
+            "Only added lines are scanned; findings have correct line "
+            "numbers and file paths from the diff context."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "diff": {
+                    "type": "string",
+                    "description": "Unified diff text (e.g. from git diff).",
+                },
+            },
+            "required": ["diff"],
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -728,6 +895,11 @@ class GuardianShieldMCPServer:
             "list_engines": self._tool_list_engines,
             "set_engine": self._tool_set_engine,
             "export_sarif": self._tool_export_sarif,
+            "save_baseline": self._tool_save_baseline,
+            "scan_with_baseline": self._tool_scan_with_baseline,
+            "check_quality_gate": self._tool_check_quality_gate,
+            "scan_files": self._tool_scan_files,
+            "scan_diff": self._tool_scan_diff,
         }
 
         logger.info("GuardianShieldMCPServer created (shield=%r)", self._shield)
@@ -1173,6 +1345,10 @@ class GuardianShieldMCPServer:
             "mark_false_positive", "list_false_positives",
             "unmark_false_positive",
             "list_engines", "set_engine",
+            "export_sarif",
+            "save_baseline", "scan_with_baseline",
+            "check_quality_gate",
+            "scan_files", "scan_diff",
         ]
         return self._tool_success(json.dumps(status, indent=2))
 
@@ -1452,6 +1628,157 @@ class GuardianShieldMCPServer:
         )
         sarif_json = findings_to_sarif_json(findings)
         return self._tool_success(sarif_json)
+
+    def _tool_save_baseline(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        code = args.get("code")
+        if not code or not isinstance(code, str):
+            return self._tool_error("'code' is required.")
+
+        language = args.get("language")
+        file_path = args.get("file_path")
+        output_path = args.get("output_path")
+
+        findings = self._shield.scan_code(
+            code, file_path=file_path, language=language,
+        )
+        result = save_baseline(findings, path=output_path)
+        result["finding_count"] = len(findings)
+        return self._tool_success(json.dumps(result, indent=2))
+
+    def _tool_scan_with_baseline(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        code = args.get("code")
+        if not code or not isinstance(code, str):
+            return self._tool_error("'code' is required.")
+
+        language = args.get("language")
+        file_path = args.get("file_path")
+        baseline_path = args.get("baseline_path")
+
+        try:
+            baseline = load_baseline(path=baseline_path)
+        except FileNotFoundError:
+            return self._tool_error(
+                f"Baseline file not found: {baseline_path or '.guardianshield-baseline.json'}. "
+                "Use save_baseline first."
+            )
+        except ValueError as exc:
+            return self._tool_error(f"Invalid baseline: {exc}")
+
+        findings = self._shield.scan_code(
+            code, file_path=file_path, language=language,
+        )
+        result = filter_baseline_findings(findings, baseline)
+
+        return self._tool_success(json.dumps({
+            "new_findings": [f.to_dict() for f in self._maybe_redact(result.new)],
+            "summary": {
+                "new": len(result.new),
+                "unchanged": len(result.unchanged),
+                "fixed": len(result.fixed),
+            },
+        }, indent=2))
+
+    def _tool_check_quality_gate(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        code = args.get("code")
+        if not code or not isinstance(code, str):
+            return self._tool_error("'code' is required.")
+
+        language = args.get("language")
+        file_path = args.get("file_path")
+
+        config = QualityGateConfig()
+        fail_on = args.get("fail_on")
+        if fail_on:
+            config.fail_on = Severity(fail_on)
+        warn_on = args.get("warn_on")
+        if warn_on:
+            config.warn_on = Severity(warn_on)
+        max_findings = args.get("max_findings")
+        if max_findings is not None:
+            config.max_findings = max_findings
+
+        findings = self._shield.scan_code(
+            code, file_path=file_path, language=language,
+        )
+        gate_result = check_quality_gate(findings, config)
+
+        return self._tool_success(json.dumps({
+            "passed": gate_result.passed,
+            "exit_code": gate_result.exit_code,
+            "verdict": gate_result.verdict,
+            "summary": gate_result.summary,
+            "findings": [f.to_dict() for f in self._maybe_redact(gate_result.findings)],
+        }, indent=2))
+
+    def _tool_scan_files(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        files = args.get("files")
+        if not files or not isinstance(files, list):
+            return self._tool_error("'files' is required (array of file objects).")
+
+        results = []
+        total_findings = 0
+
+        for file_entry in files:
+            path = file_entry.get("path")
+            if not path:
+                continue
+            language = file_entry.get("language")
+
+            try:
+                findings = self._shield.scan_file(path, language=language)
+            except FileNotFoundError:
+                results.append({
+                    "file_path": path,
+                    "error": f"File not found: {path}",
+                    "findings": [],
+                })
+                continue
+            except (IsADirectoryError, OSError) as exc:
+                results.append({
+                    "file_path": path,
+                    "error": str(exc),
+                    "findings": [],
+                })
+                continue
+
+            total_findings += len(findings)
+            results.append({
+                "file_path": path,
+                "findings": [f.to_dict() for f in self._maybe_redact(findings)],
+            })
+
+        return self._tool_success(json.dumps({
+            "results": results,
+            "summary": {
+                "files_scanned": len(results),
+                "total_findings": total_findings,
+            },
+        }, indent=2))
+
+    def _tool_scan_diff(self, args: dict[str, Any]) -> dict[str, Any]:
+        assert self._shield is not None
+        diff_text = args.get("diff")
+        if not diff_text or not isinstance(diff_text, str):
+            return self._tool_error("'diff' is required.")
+
+        hunks = parse_unified_diff(diff_text)
+        findings = _scan_diff(self._shield, diff_text)
+
+        lines_added = sum(len(h.added_lines) for h in hunks)
+        files_in_diff = len(hunks)
+
+        return self._tool_success(json.dumps({
+            "findings": [f.to_dict() for f in self._maybe_redact(findings)],
+            "summary": {
+                "files_in_diff": files_in_diff,
+                "lines_added": lines_added,
+                "findings_count": len(findings),
+            },
+        }, indent=2))
 
     # ------------------------------------------------------------------
     # Redaction

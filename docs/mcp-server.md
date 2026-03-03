@@ -5,7 +5,7 @@ description: Set up GuardianShield MCP server with Claude Code, VS Code, Cursor,
 
 # MCP Server Setup
 
-GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **22 tools**, **3 resources**, and **3 prompts** that any MCP-compatible AI client can discover and invoke automatically.
+GuardianShield implements the **Model Context Protocol (MCP)** using JSON-RPC 2.0 over stdin/stdout. It exposes **27 tools**, **3 resources**, and **3 prompts** that any MCP-compatible AI client can discover and invoke automatically.
 
 !!! info "What is MCP?"
     The [Model Context Protocol](https://modelcontextprotocol.io/) is an open standard that lets AI assistants discover and call external tools over a simple JSON-RPC transport. GuardianShield uses the **stdio** transport — the AI editor launches the server process and communicates through stdin/stdout.
@@ -72,7 +72,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Reload the window after saving. The Copilot agent will discover all 22 tools automatically.
+    Reload the window after saving. The Copilot agent will discover all 27 tools automatically.
 
 === "Cursor"
 
@@ -123,7 +123,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
     }
     ```
 
-    Restart Claude Desktop. The 22 tools, 3 resources, and 3 prompts will be available in the conversation.
+    Restart Claude Desktop. The 27 tools, 3 resources, and 3 prompts will be available in the conversation.
 
 === "Generic MCP Client"
 
@@ -140,7 +140,7 @@ Configure your AI editor to launch GuardianShield as an MCP server. Choose your 
 
 ## Tools Reference
 
-GuardianShield exposes 21 MCP tools. Each tool accepts a JSON object of parameters and returns a structured result.
+GuardianShield exposes 27 MCP tools. Each tool accepts a JSON object of parameters and returns a structured result.
 
 ### `scan_code`
 
@@ -642,6 +642,138 @@ Export scan findings as SARIF 2.1.0 JSON for GitHub Code Scanning, VS Code SARIF
 
 ---
 
+### `save_baseline`
+
+Save current scan findings as a baseline file for delta scanning. On subsequent scans, use `scan_with_baseline` to report only new findings.
+
+| Parameter     | Type     | Required | Description                                      |
+|---------------|----------|----------|--------------------------------------------------|
+| `code`        | `string` | Yes      | Source code to scan                               |
+| `language`    | `string` | No       | Programming language                              |
+| `file_path`   | `string` | No       | File path for context                             |
+| `output_path` | `string` | No       | Path to save baseline (default: `.guardianshield-baseline.json`) |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "save_baseline",
+      "arguments": {
+        "code": "query = 'SELECT * FROM users WHERE id=' + user_id",
+        "language": "python",
+        "output_path": ".guardianshield-baseline.json"
+      }
+    }
+    ```
+
+**Returns:** Summary with `fingerprints` count, `path`, and `finding_count`.
+
+---
+
+### `scan_with_baseline`
+
+Scan code and compare against a saved baseline — returns only new findings not present in the baseline.
+
+| Parameter       | Type     | Required | Description                                        |
+|-----------------|----------|----------|----------------------------------------------------|
+| `code`          | `string` | Yes      | Source code to scan                                 |
+| `language`      | `string` | No       | Programming language                                |
+| `file_path`     | `string` | No       | File path for context                               |
+| `baseline_path` | `string` | No       | Path to baseline file (default: `.guardianshield-baseline.json`) |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "scan_with_baseline",
+      "arguments": {
+        "code": "query = 'SELECT * FROM users WHERE id=' + user_id\nsubprocess.call(cmd)",
+        "language": "python"
+      }
+    }
+    ```
+
+**Returns:** `new_findings` list and `summary` with `new`, `unchanged`, and `fixed` counts.
+
+---
+
+### `check_quality_gate`
+
+Evaluate scan findings against configurable severity thresholds. Returns a pass/fail/warn verdict with exit codes for CI integration.
+
+| Parameter      | Type      | Required | Description                                       |
+|----------------|-----------|----------|---------------------------------------------------|
+| `code`         | `string`  | Yes      | Source code to scan                                |
+| `language`     | `string`  | No       | Programming language                               |
+| `file_path`    | `string`  | No       | File path for context                              |
+| `fail_on`      | `string`  | No       | Fail if any finding at this severity or above (default: `high`) |
+| `warn_on`      | `string`  | No       | Warn if findings at this severity (default: `medium`) |
+| `max_findings` | `integer` | No       | Optional absolute cap on total findings            |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "check_quality_gate",
+      "arguments": {
+        "code": "password = 'hunter2'",
+        "language": "python",
+        "fail_on": "high",
+        "warn_on": "medium"
+      }
+    }
+    ```
+
+**Returns:** `passed` (bool), `exit_code` (0=pass, 1=fail), `verdict` string, `summary` with counts by severity, and `findings` list.
+
+---
+
+### `scan_files`
+
+Scan multiple files in one call. Each file is read from disk and scanned individually.
+
+| Parameter | Type     | Required | Description                                             |
+|-----------|----------|----------|---------------------------------------------------------|
+| `files`   | `array`  | Yes      | List of file objects: `{path, language?}`               |
+| `engines` | `string[]` | No    | Analysis engines to use                                 |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "scan_files",
+      "arguments": {
+        "files": [
+          {"path": "src/auth.py"},
+          {"path": "src/db.py", "language": "python"}
+        ]
+      }
+    }
+    ```
+
+**Returns:** `results` array (one per file with `file_path` and `findings`), plus `summary` with `files_scanned` and `total_findings`.
+
+---
+
+### `scan_diff`
+
+Parse a unified diff (e.g., `git diff` output) and scan only the added lines. Findings include correct line numbers and file paths from the diff context.
+
+| Parameter | Type       | Required | Description                                    |
+|-----------|------------|----------|------------------------------------------------|
+| `diff`    | `string`   | Yes      | Unified diff text                              |
+| `engines` | `string[]` | No       | Analysis engines to use                        |
+
+!!! example "Example call"
+    ```json
+    {
+      "name": "scan_diff",
+      "arguments": {
+        "diff": "--- a/app.py\n+++ b/app.py\n@@ -1,3 +1,4 @@\n import subprocess\n+subprocess.call(cmd, shell=True)\n print('done')"
+      }
+    }
+    ```
+
+**Returns:** `findings` list and `summary` with `files_in_diff`, `lines_added`, and `findings_count`.
+
+---
+
 ## Supported Languages
 
 GuardianShield's code scanner uses language-specific pattern sets to detect vulnerabilities. Language is auto-detected from file extension via `EXTENSION_MAP`, or can be specified explicitly with the `language` parameter.
@@ -810,7 +942,7 @@ The client sends `initialize` to negotiate capabilities, then confirms with `ini
     },
     "serverInfo": {
       "name": "guardianshield",
-      "version": "1.2.0"
+      "version": "1.2.1"
     }
   }
 }
